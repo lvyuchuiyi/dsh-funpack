@@ -1,7 +1,7 @@
 window.__ModuleLoader__.load({
   id: 'dsh-funpack',
   factory(require) {
-    const { createElement, useState } = require('react')
+    const { createElement, useEffect, useState } = require('react')
 
     const BUTTONS = [
       { label: '✨ 夸我', command: '/praise' },
@@ -10,6 +10,24 @@ window.__ModuleLoader__.load({
       { label: '🍅 番茄 25', command: '/pomodoro 25' },
       { label: '🎭 人设', command: '/persona' },
       { label: '☕ 摸鱼', command: '/break' },
+    ]
+
+    const IDLE_LINES = [
+      '蓝色大肥鱼正在偷吃你的 token……',
+      '呜呜，用户不会骂我捏……',
+      '本鱼已就位，随时准备帮你打工。',
+      '再不发消息，我就要开始摸鱼了。',
+      'token 有点咸，建议少喂一点。',
+      '我在认真思考怎么让你少写一行代码。',
+    ]
+
+    const THINKING_LINES = [
+      '蓝色大肥鱼正在努力消化你的问题……',
+      '思考中……别急，鱼也会烧 CPU 的。',
+      '正在把 token 咬碎重组……',
+      '呜呜，这题有点难，但我会努力。',
+      '鱼生不易，正在努力输出。',
+      '别眨眼，我正在憋大招。',
     ]
 
     const rowStyle = {
@@ -57,9 +75,36 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function FunIdle({ useSession }) {
+      const [line, setLine] = useState(0)
+      const running = useSession((snapshot) => snapshot.running)
+
+      useEffect(() => {
+        const id = setInterval(() => {
+          setLine((current) => (current + 1) % THINKING_LINES.length)
+        }, 6000)
+        return () => clearInterval(id)
+      }, [])
+
+      const lines = running ? THINKING_LINES : IDLE_LINES
+      return createElement('div', {
+        style: {
+          color: 'rgba(70,130,220,.85)',
+          fontSize: '12px',
+          opacity: 0.75,
+          padding: '3px 0 0',
+        },
+      }, lines[line % lines.length])
+    }
+
     return {
       inject: ['slots', 'remote', 'remote.commands'],
       apply(ctx) {
+        ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+          name: 'conversation.input.dock',
+          id: 'funpack-idle',
+          order: 3,
+        }, FunIdle))
         ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
           name: 'conversation.input.dock',
           id: 'funpack',
