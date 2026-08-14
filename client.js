@@ -1,7 +1,7 @@
 window.__ModuleLoader__.load({
   id: 'dsh-funpack',
   factory(require) {
-    const { createElement, useEffect, useState } = require('react')
+    const { createElement, useEffect, useRef, useState } = require('react')
     const { createPortal } = require('react-dom')
 
     const BUTTONS = [
@@ -79,10 +79,8 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const petStyle = {
+                const petBaseStyle = {
       position: 'fixed',
-      right: 16,
-      bottom: 16,
       zIndex: 9999,
       display: 'flex',
       flexDirection: 'column',
@@ -102,19 +100,106 @@ window.__ModuleLoader__.load({
       maxWidth: 220,
       lineHeight: 1.5,
     }
-    const petButtonStyle = {
+    const controlRowStyle = {
+      display: 'flex',
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end',
+      gap: 4,
+      maxWidth: 260,
       pointerEvents: 'auto',
-      background: 'none',
-      border: 'none',
+    }
+    const controlButtonStyle = {
+      height: 22,
+      minWidth: 22,
+      lineHeight: '20px',
+      border: '1px solid rgba(74,144,217,.4)',
+      borderRadius: 6,
+      background: 'rgba(255,255,255,.92)',
+      color: '#16324f',
+      fontSize: 12,
       cursor: 'pointer',
-      padding: 0,
-      filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))',
+      padding: '0 6px',
+    }
+    const panelStyle = {
+      background: 'rgba(255,255,255,.98)',
+      border: '1px solid rgba(74,144,217,.35)',
+      borderRadius: 10,
+      boxShadow: '0 4px 16px rgba(0,0,0,.14)',
+      padding: 10,
+      width: 240,
+      pointerEvents: 'auto',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+    }
+    const textareaStyle = {
+      width: '100%',
+      boxSizing: 'border-box',
+      fontSize: 12,
+      fontFamily: 'inherit',
+      borderRadius: 6,
+      border: '1px solid rgba(74,144,217,.3)',
+      padding: '4px 6px',
+      resize: 'vertical',
+    }
+    const smallButtonStyle = {
+      height: 24,
+      border: '1px solid rgba(74,144,217,.4)',
+      borderRadius: 6,
+      background: '#eaf3ff',
+      color: '#16324f',
+      fontSize: 12,
+      cursor: 'pointer',
+      padding: '0 8px',
+    }
+    const configLabelStyle = {
+      fontSize: 12,
+      fontWeight: 600,
+      color: '#16324f',
     }
 
-    function FunPet({ useSession }) {
+    const DEFAULT_CONFIG = {
+      image: null,
+      idleLines: [],
+      thinkingLines: [],
+      buttons: [
+        { label: '摸头', command: '/praise' },
+        { label: '喂食', command: '/break' },
+      ],
+    }
+
+    const loadConfig = () => {
+      try {
+        const raw = localStorage.getItem('dsh-funpack-pet-config')
+        if (!raw) return DEFAULT_CONFIG
+        const saved = JSON.parse(raw)
+        return {
+          image: typeof saved.image === 'string' ? saved.image : null,
+          idleLines: Array.isArray(saved.idleLines) ? saved.idleLines.filter((item) => typeof item === 'string') : [],
+          thinkingLines: Array.isArray(saved.thinkingLines) ? saved.thinkingLines.filter((item) => typeof item === 'string') : [],
+          buttons: Array.isArray(saved.buttons)
+            ? saved.buttons.filter((item) => item && typeof item.label === 'string' && typeof item.command === 'string')
+            : DEFAULT_CONFIG.buttons,
+        }
+      } catch {
+        return DEFAULT_CONFIG
+      }
+    }
+
+    function FunPet({ useSession, run }) {
       const [line, setLine] = useState(0)
       const [waving, setWaving] = useState(false)
+      const [pos, setPos] = useState(null)
+      const [size, setSize] = useState(96)
+      const [panelOpen, setPanelOpen] = useState(false)
+      const [config, setConfig] = useState(loadConfig)
       const running = useSession((snapshot) => snapshot.running)
+      const dragRef = useRef(null)
+      const movedRef = useRef(false)
+      const posRef = useRef(pos)
+      const sizeRef = useRef(size)
+      posRef.current = pos
+      sizeRef.current = size
 
       useEffect(() => {
         const id = setInterval(() => {
@@ -123,30 +208,188 @@ window.__ModuleLoader__.load({
         return () => clearInterval(id)
       }, [running])
 
-      const lines = running ? THINKING_LINES : IDLE_LINES
-      const text = lines[line % lines.length]
+      useEffect(() => {
+        try {
+          const raw = localStorage.getItem('dsh-funpack-pet')
+          if (!raw) return
+          const saved = JSON.parse(raw)
+          if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) setPos({ x: saved.x, y: saved.y })
+          if (Number.isFinite(saved?.size)) setSize(Math.max(48, Math.min(220, saved.size)))
+        } catch {}
+      }, [])
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('dsh-funpack-pet-config', JSON.stringify(config))
+        } catch {}
+      }, [config])
+
+      const save = (nextPos, nextSize) => {
+        try {
+          localStorage.setItem('dsh-funpack-pet', JSON.stringify({
+            x: nextPos?.x ?? null,
+            y: nextPos?.y ?? null,
+            size: nextSize,
+          }))
+        } catch {}
+      }
+
+      const startMove = (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return
+        const rect = event.currentTarget.getBoundingClientRect()
+        movedRef.current = false
+        dragRef.current = {
+          id: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+        }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+      }
+
+      const onMove = (event) => {
+        const drag = dragRef.current
+        if (!drag || event.pointerId !== drag.id) return
+        if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 3) {
+          movedRef.current = true
+        }
+        const outer = event.currentTarget.parentElement
+        const outerRect = outer.getBoundingClientRect()
+        const x = Math.max(0, Math.min(window.innerWidth - outerRect.width, event.clientX - drag.offsetX))
+        const y = Math.max(0, Math.min(window.innerHeight - outerRect.height, event.clientY - drag.offsetY))
+        setPos({ x, y })
+      }
+
+      const onUp = (event) => {
+        const drag = dragRef.current
+        if (!drag || event.pointerId !== drag.id) return
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        dragRef.current = null
+        save(posRef.current, sizeRef.current)
+      }
+
+      const changeSize = (delta) => {
+        const next = Math.max(48, Math.min(220, sizeRef.current + delta))
+        setSize(next)
+        save(posRef.current, next)
+      }
+
       const handleClick = () => {
+        if (movedRef.current) return
         setLine((current) => (current + 1) % lines.length)
-        if (!waving) {
+        if (!waving && !config.image) {
           setWaving(true)
           setTimeout(() => setWaving(false), 1400)
         }
       }
+
+      const onFile = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => setConfig((current) => ({ ...current, image: String(reader.result) }))
+        reader.readAsDataURL(file)
+      }
+
+      const parseButtons = (text) => text.split('\n').map((raw) => {
+        const idx = raw.indexOf(',')
+        if (idx === -1) return null
+        const label = raw.slice(0, idx).trim()
+        const command = raw.slice(idx + 1).trim()
+        return label && command ? { label, command } : null
+      }).filter(Boolean)
+
+      const resetConfig = () => {
+        setConfig({
+          image: null,
+          idleLines: [],
+          thinkingLines: [],
+          buttons: [
+            { label: '摸头', command: '/praise' },
+            { label: '喂食', command: '/break' },
+          ],
+        })
+      }
+
+      const idleLines = config.idleLines.length > 0 ? config.idleLines : IDLE_LINES
+      const thinkingLines = config.thinkingLines.length > 0 ? config.thinkingLines : THINKING_LINES
+      const lines = running ? thinkingLines : idleLines
+      const text = lines[line % lines.length]
+      const petImage = config.image || (waving ? PET_WAVING : PET_IDLE)
+      const containerStyle = pos === null
+        ? { ...petBaseStyle, right: 16, bottom: 16 }
+        : { ...petBaseStyle, left: pos.x, top: pos.y }
+      const petWidth = size
+      const petHeight = Math.round((size * 208) / 192)
       return createPortal(
-        createElement('div', { style: petStyle },
+        createElement('div', { style: containerStyle },
+          panelOpen ? createElement('div', { style: panelStyle },
+            createElement('div', { style: configLabelStyle }, '形象（GIF/PNG/WebP）'),
+            createElement('input', { type: 'file', accept: 'image/*', onChange: onFile, style: { width: '100%' } }),
+            createElement('div', { style: { display: 'flex', gap: 4 } },
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setConfig((current) => ({ ...current, image: null })) }, '默认形象'),
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: resetConfig }, '重置全部'),
+            ),
+            createElement('div', { style: configLabelStyle }, '空闲台词（每行一条）'),
+            createElement('textarea', {
+              style: textareaStyle,
+              rows: 4,
+              value: config.idleLines.join('\n'),
+              onChange: (event) => setConfig((current) => ({ ...current, idleLines: event.target.value.split('\n') })),
+            }),
+            createElement('div', { style: configLabelStyle }, '思考台词（每行一条）'),
+            createElement('textarea', {
+              style: textareaStyle,
+              rows: 4,
+              value: config.thinkingLines.join('\n'),
+              onChange: (event) => setConfig((current) => ({ ...current, thinkingLines: event.target.value.split('\n') })),
+            }),
+            createElement('div', { style: configLabelStyle }, '互动键（每行：名称,命令）'),
+            createElement('textarea', {
+              style: textareaStyle,
+              rows: 4,
+              value: config.buttons.map((button) => `${button.label},${button.command}`).join('\n'),
+              onChange: (event) => setConfig((current) => ({ ...current, buttons: parseButtons(event.target.value) })),
+            }),
+            createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setPanelOpen(false) }, '完成'),
+          ) : null,
           createElement('div', { style: bubbleStyle, role: 'status' }, text),
-          createElement('button', {
-            type: 'button',
-            style: petButtonStyle,
-            title: '鲸鱼娘',
+          createElement('div', { style: controlRowStyle },
+            createElement('button', { type: 'button', style: controlButtonStyle, title: '设置', onClick: () => setPanelOpen((open) => !open) }, '⚙'),
+            createElement('button', { type: 'button', style: controlButtonStyle, title: '缩小', onClick: () => changeSize(-16) }, '-'),
+            createElement('button', { type: 'button', style: controlButtonStyle, title: '放大', onClick: () => changeSize(16) }, '+'),
+            ...config.buttons.map((button) => createElement('button', {
+              type: 'button',
+              key: `${button.label}-${button.command}`,
+              style: controlButtonStyle,
+              onClick: () => {
+                if (typeof run === 'function') run(button.command)
+              },
+            }, button.label)),
+          ),
+          createElement('div', {
+            style: {
+              position: 'relative',
+              pointerEvents: 'auto',
+              touchAction: 'none',
+              cursor: 'grab',
+            },
+            title: '拖拽移动',
+            onPointerDown: startMove,
             onClick: handleClick,
-          }, createElement('img', {
-            src: waving ? PET_WAVING : PET_IDLE,
-            alt: '鲸鱼娘',
-            width: 96,
-            height: 104,
-            style: { display: 'block' },
-          })),
+          },
+            createElement('img', {
+              src: petImage,
+              alt: '桌宠',
+              width: petWidth,
+              height: petHeight,
+              draggable: false,
+              style: { display: 'block', pointerEvents: 'none', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))' },
+            }),
+          ),
         ),
         document.body,
       )
@@ -159,6 +402,13 @@ window.__ModuleLoader__.load({
           name: 'conversation.input.dock',
           id: 'funpack-pet',
           order: 2,
+          inject: (sessionId) => ({
+            run: async (line) => {
+              const result = await ctx.remote.commands.execute(sessionId, line)
+              if (!result.ok) return `${result.error.message} (${result.error.code})`
+              return result.value === undefined ? `unknown command: ${line}` : null
+            },
+          }),
         }, FunPet))
         ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
           name: 'conversation.input.dock',
