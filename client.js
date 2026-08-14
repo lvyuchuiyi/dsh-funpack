@@ -429,6 +429,11 @@ window.__ModuleLoader__.load({
 
       const clickButton = async (button) => {
         if (button.command === '/break' && breakTarget.trim()) {
+          const target = normalizeBreakTarget(breakTarget)
+          if (isUrlBreakTarget(breakTarget)) {
+            window.open(target, '_blank', 'noopener,noreferrer')
+            return
+          }
           return click(`/break-go ${breakTarget.trim()}`)
         }
         return click(button.command)
@@ -1007,6 +1012,18 @@ window.__ModuleLoader__.load({
     const PET_VISIBLE_KEY = 'dsh-funpack-pet-visible'
 
     const loadPetVisible = () => localStorage.getItem(PET_VISIBLE_KEY) !== '0'
+
+    const normalizeBreakTarget = (target) => {
+      const trimmed = target.trim()
+      if (/^https?:\/\//i.test(trimmed)) return trimmed
+      if (/^[^\s/]+\.\w{2,}/.test(trimmed)) return `https://${trimmed}`
+      return trimmed
+    }
+
+    const isUrlBreakTarget = (target) => {
+      const trimmed = target.trim()
+      return /^https?:\/\//i.test(trimmed) || /^[^\s/]+\.\w{2,}/.test(trimmed)
+    }
 
     function FunPet({ useSession, run }) {
       const [line, setLine] = useState(0)
