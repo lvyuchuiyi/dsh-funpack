@@ -103,6 +103,11 @@ window.__ModuleLoader__.load({
       buttonScale: 110,
       buttonAlign: 'center',
       effect: 'none',
+      danmakuEnabled: true,
+      danmakuStyle: 'neon',
+      danmakuSpeed: 'normal',
+      danmakuSize: 'medium',
+      danmakuOpacity: 90,
       modules: BUTTON_MODULES.map((module) => ({ ...module })),
     }
 
@@ -126,6 +131,11 @@ window.__ModuleLoader__.load({
           buttonScale: beautyClamp(saved.buttonScale, 80, 160, defaults.buttonScale),
           buttonAlign: ['left', 'center', 'right'].includes(saved.buttonAlign) ? saved.buttonAlign : defaults.buttonAlign,
           effect: EFFECT_IDS.includes(saved.effect) ? saved.effect : defaults.effect,
+          danmakuEnabled: typeof saved.danmakuEnabled === 'boolean' ? saved.danmakuEnabled : defaults.danmakuEnabled,
+          danmakuStyle: DANMAKU_STYLE_IDS.includes(saved.danmakuStyle) ? saved.danmakuStyle : defaults.danmakuStyle,
+          danmakuSpeed: DANMAKU_SPEED_IDS.includes(saved.danmakuSpeed) ? saved.danmakuSpeed : defaults.danmakuSpeed,
+          danmakuSize: DANMAKU_SIZE_IDS.includes(saved.danmakuSize) ? saved.danmakuSize : defaults.danmakuSize,
+          danmakuOpacity: beautyClamp(saved.danmakuOpacity, 30, 100, defaults.danmakuOpacity),
           modules: BUTTON_MODULES.map((def) => {
             const savedModule = Array.isArray(saved.modules)
               ? saved.modules.find((module) => module && module.key === def.key)
@@ -242,6 +252,10 @@ window.__ModuleLoader__.load({
           0%, 100% { background-position: 0% 50%; }
           50% { background-position: 100% 50%; }
         }
+        @keyframes dshFpDanmaku {
+          from { transform: translateX(0); }
+          to { transform: translateX(-130vw); }
+        }
       `
     }
 
@@ -274,6 +288,22 @@ window.__ModuleLoader__.load({
       { id: 'aurora', label: '极光' },
     ]
     const EFFECT_IDS = EFFECT_OPTIONS.map((option) => option.id)
+
+    const DANMAKU_COMMANDS = new Set(['/praise', '/fortune'])
+    const DANMAKU_STYLES = [
+      { id: 'classic', label: '白字', color: '#ffffff', shadow: '0 0 6px rgba(0,0,0,.9)' },
+      { id: 'neon', label: '霓虹', color: '#22d3ee', shadow: '0 0 8px #22d3ee, 0 0 18px #22d3ee' },
+      { id: 'candy', label: '糖果', color: '#ff9ac1', shadow: '0 0 8px #ff2d95, 0 0 18px #ff2d95' },
+      { id: 'ink', label: '墨鱼', color: '#fbbf24', shadow: '0 0 8px rgba(0,0,0,.9), 2px 2px 0 #78350f' },
+      { id: 'cyber', label: '赛博', color: '#a5f3fc', shadow: '0 0 10px #22d3ee, 3px 3px 0 #7c3aed' },
+    ]
+    const DANMAKU_SPEEDS = { slow: 11, normal: 8, fast: 5.5 }
+    const DANMAKU_SIZES = { small: 16, medium: 22, large: 30 }
+    const DANMAKU_SPEED_LABELS = { slow: '慢', normal: '中', fast: '快' }
+    const DANMAKU_SIZE_LABELS = { small: '小', medium: '中', large: '大' }
+    const DANMAKU_STYLE_IDS = DANMAKU_STYLES.map((style) => style.id)
+    const DANMAKU_SPEED_IDS = Object.keys(DANMAKU_SPEEDS)
+    const DANMAKU_SIZE_IDS = Object.keys(DANMAKU_SIZES)
 
     const loadAffinity = () => {
       const defaults = { points: 0, pet: 0, feed: 0, hug: 0, task: 0 }
@@ -346,12 +376,21 @@ window.__ModuleLoader__.load({
       fontSize: '12px',
       marginLeft: '6px',
     }
+    const danmakuLayerStyle = {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 9998,
+      pointerEvents: 'none',
+      overflow: 'hidden',
+    }
 
     function FunButtons({ run }) {
       const [error, setError] = useState(null)
       const [beautyOpen, setBeautyOpen] = useState(false)
       const [beauty, setBeauty] = useState(loadBeauty)
       const [petVisible, setPetVisible] = useState(loadPetVisible)
+      const [danmaku, setDanmaku] = useState([])
+      const [breakTarget, setBreakTarget] = useState(() => localStorage.getItem('dsh-funpack-break-target') || '')
 
       useEffect(() => {
         try {
@@ -366,13 +405,33 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener('dsh-funpack-pet-visible-change', syncPetVisible)
       }, [])
 
-      const click = (command) => {
+      const showDanmaku = (text) => {
+        if (!beauty.danmakuEnabled || !text) return
+        const id = `${Date.now()}-${Math.random()}`
+        setDanmaku((list) => [...list, { id, text }])
+        setTimeout(() => setDanmaku((list) => list.filter((item) => item.id !== id)), 8000)
+      }
+
+      const click = async (command) => {
         setError(null)
-        run(command).then((failure) => {
-          if (failure) setError(failure)
-        }, (reason) => {
+        try {
+          const result = await run(command)
+          if (!result) return
+          if (result.ok === false) {
+            setError(result.error)
+            return
+          }
+          if (DANMAKU_COMMANDS.has(command) && result.text) showDanmaku(result.text)
+        } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason))
-        })
+        }
+      }
+
+      const clickButton = async (button) => {
+        if (button.command === '/break' && breakTarget.trim()) {
+          return click(`/break-go ${breakTarget.trim()}`)
+        }
+        return click(button.command)
       }
 
       const updateBeauty = (patch) => setBeauty((current) => ({ ...current, ...patch }))
@@ -412,7 +471,7 @@ window.__ModuleLoader__.load({
             lineHeight: `${Math.round(20 * scale)}px`,
             padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
           },
-          onClick: () => click(button.command),
+          onClick: () => clickButton(button),
         }, button.label)),
         createElement('button', {
           key: 'pet-visible',
@@ -439,13 +498,48 @@ window.__ModuleLoader__.load({
         error === null ? null : createElement('span', { style: errorStyle, role: 'status' }, error),
       )
 
+      const danmakuStyleDef = DANMAKU_STYLES.find((style) => style.id === beauty.danmakuStyle) || DANMAKU_STYLES[0]
+      const danmakuSpeed = DANMAKU_SPEEDS[beauty.danmakuSpeed] || 8
+      const danmakuSize = DANMAKU_SIZES[beauty.danmakuSize] || 22
+      const danmakuLayer = danmaku.length === 0
+        ? null
+        : createPortal(
+          createElement('div', { style: danmakuLayerStyle },
+            danmaku.map((item, index) => createElement('span', {
+              key: item.id,
+              className: 'dsh-funpack-danmaku-item',
+              style: {
+                position: 'absolute',
+                left: '100%',
+                top: `${12 + (index % 7) * 12}%`,
+                whiteSpace: 'nowrap',
+                fontSize: danmakuSize,
+                color: danmakuStyleDef.color,
+                textShadow: danmakuStyleDef.shadow,
+                opacity: beauty.danmakuOpacity / 100,
+                fontWeight: 700,
+                fontFamily: 'inherit',
+                animation: `dshFpDanmaku ${danmakuSpeed}s linear forwards`,
+              },
+            }, item.text)),
+          ),
+          document.body,
+        )
+
       return createElement(Fragment, null,
         row,
+        danmakuLayer,
         beautyOpen ? createPortal(createElement(BeautyPanel, {
           beauty,
           update: updateBeauty,
           move: moveModule,
           reset: resetBeauty,
+          breakTarget,
+          onBreakTargetChange: (value) => {
+            setBreakTarget(value)
+            localStorage.setItem('dsh-funpack-break-target', value)
+          },
+          onPreviewDanmaku: () => showDanmaku('✨ 今天也是元气满满的一天！'),
           onClose: () => setBeautyOpen(false),
         }), document.body) : null,
       )
@@ -604,7 +698,7 @@ window.__ModuleLoader__.load({
       placeItems: 'center',
     }
 
-    function BeautyPanel({ beauty, update, move, reset, onClose }) {
+    function BeautyPanel({ beauty, update, move, reset, breakTarget, onBreakTargetChange, onPreviewDanmaku, onClose }) {
       const onBgFile = (event) => {
         const file = event.target.files?.[0]
         if (!file) return
@@ -636,8 +730,10 @@ window.__ModuleLoader__.load({
         const payload = {}
         const beautyRaw = localStorage.getItem('dsh-funpack-beauty-config')
         const petRaw = localStorage.getItem('dsh-funpack-pet-config')
+        const breakTargetRaw = localStorage.getItem('dsh-funpack-break-target') || ''
         if (beautyRaw) payload.beauty = JSON.parse(beautyRaw)
         if (petRaw) payload.pet = JSON.parse(petRaw)
+        if (breakTargetRaw) payload.breakTarget = breakTargetRaw
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -661,6 +757,10 @@ window.__ModuleLoader__.load({
               }
               if (parsed.pet) {
                 localStorage.setItem('dsh-funpack-pet-config', JSON.stringify(parsed.pet))
+              }
+              if (parsed.breakTarget) {
+                localStorage.setItem('dsh-funpack-break-target', parsed.breakTarget)
+                onBreakTargetChange(parsed.breakTarget)
               }
               window.location.reload()
             }
@@ -728,6 +828,59 @@ window.__ModuleLoader__.load({
           }, EFFECT_OPTIONS.map((option) => createElement('option', { key: option.id, value: option.id }, option.label))),
           createElement('span', { style: beautyValueStyle }, EFFECT_OPTIONS.find((option) => option.id === beauty.effect)?.label),
         ),
+        createElement('div', { style: configLabelStyle }, '弹幕'),
+        createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          createElement('input', {
+            type: 'checkbox',
+            checked: beauty.danmakuEnabled,
+            onChange: (event) => update({ danmakuEnabled: event.target.checked }),
+          }),
+          createElement('span', { style: { color: 'var(--fp-text, #e6edf3)' } }, '夸我 / 运势以弹幕展示'),
+        ),
+        createElement('button', { type: 'button', style: { ...smallButtonStyle, width: '100%' }, onClick: onPreviewDanmaku }, '试看弹幕'),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '弹幕样式'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.danmakuStyle,
+            onChange: (event) => update({ danmakuStyle: event.target.value }),
+          }, DANMAKU_STYLES.map((style) => createElement('option', { key: style.id, value: style.id }, style.label))),
+          createElement('span', { style: beautyValueStyle }, DANMAKU_STYLES.find((style) => style.id === beauty.danmakuStyle)?.label),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '弹幕速度'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.danmakuSpeed,
+            onChange: (event) => update({ danmakuSpeed: event.target.value }),
+          }, DANMAKU_SPEED_IDS.map((speed) => createElement('option', { key: speed, value: speed }, DANMAKU_SPEED_LABELS[speed]))),
+          createElement('span', { style: beautyValueStyle }, DANMAKU_SPEED_LABELS[beauty.danmakuSpeed]),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '弹幕大小'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.danmakuSize,
+            onChange: (event) => update({ danmakuSize: event.target.value }),
+          }, DANMAKU_SIZE_IDS.map((size) => createElement('option', { key: size, value: size }, DANMAKU_SIZE_LABELS[size]))),
+          createElement('span', { style: beautyValueStyle }, DANMAKU_SIZE_LABELS[beauty.danmakuSize]),
+        ),
+        rangeRow('弹幕透明度', beauty.danmakuOpacity, 30, 100, (value) => update({ danmakuOpacity: value })),
         createElement('div', { style: beautyRowStyle },
           createElement('span', { style: beautyLabelStyle }, '按钮对齐'),
           createElement('div', { style: { display: 'flex', gap: 4 } },
@@ -745,6 +898,14 @@ window.__ModuleLoader__.load({
           ),
           createElement('span', { style: beautyValueStyle }, alignOptions.find((option) => option.value === beauty.buttonAlign)?.label),
         ),
+        createElement('div', { style: configLabelStyle }, '摸鱼按钮'),
+        createElement('input', {
+          type: 'text',
+          style: textareaStyle,
+          placeholder: '网址或程序路径，留空则显示摸鱼提醒',
+          value: breakTarget,
+          onChange: (event) => onBreakTargetChange(event.target.value),
+        }),
         createElement('div', { style: configLabelStyle }, '快捷按钮模块'),
         createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           beauty.modules.map((module) => createElement('div', { key: module.key, style: { display: 'flex', alignItems: 'center', gap: 6 } },
@@ -1011,8 +1172,8 @@ window.__ModuleLoader__.load({
 
       const handlePetCommand = async (button) => {
         if (typeof run !== 'function') return
-        const failure = await run(button.command)
-        if (failure) return
+        const result = await run(button.command)
+        if (!result || result.ok === false) return
         const type = AFFINITY_COMMANDS[button.command]
         if (!type) return
         const gain = addAffinity(type)
@@ -1210,8 +1371,10 @@ window.__ModuleLoader__.load({
           inject: (sessionId) => ({
             run: async (line) => {
               const result = await ctx.remote.commands.execute(sessionId, line)
-              if (!result.ok) return `${result.error.message} (${result.error.code})`
-              return result.value === undefined ? `unknown command: ${line}` : null
+              if (!result.ok) return { ok: false, error: `${result.error.message} (${result.error.code})` }
+              const value = result.value
+              if (value === undefined) return { ok: false, error: `unknown command: ${line}` }
+              return { ok: true, text: typeof value === 'string' ? value : (value?.text || '') }
             },
           }),
         }, FunPet))
@@ -1222,8 +1385,10 @@ window.__ModuleLoader__.load({
           inject: (sessionId) => ({
             run: async (line) => {
               const result = await ctx.remote.commands.execute(sessionId, line)
-              if (!result.ok) return `${result.error.message} (${result.error.code})`
-              return result.value === undefined ? `unknown command: ${line}` : null
+              if (!result.ok) return { ok: false, error: `${result.error.message} (${result.error.code})` }
+              const value = result.value
+              if (value === undefined) return { ok: false, error: `unknown command: ${line}` }
+              return { ok: true, text: typeof value === 'string' ? value : (value?.text || '') }
             },
           }),
         }, FunButtons))

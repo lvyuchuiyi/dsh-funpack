@@ -3,6 +3,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { exec } from 'node:child_process'
 
 export const name = 'dsh-funpack'
 export const inject = ['commands', 'systemPrompt', 'webServer']
@@ -248,6 +249,22 @@ export function apply(ctx) {
     description: '随机一条休息/摸鱼建议',
     handler() {
       return ok(`☕ ${pick(BREAK_TIPS)}`)
+    },
+  })
+
+  ctx.commands.register({
+    name: 'break-go',
+    description: '打开自定义摸鱼目标：网址或本地程序路径',
+    input: { hint: '网址或程序路径' },
+    handler({ rawInput }) {
+      const target = rawInput.trim()
+      if (!target) return ok('☕ 没有设置摸鱼目标，请先在美化面板里填一个。')
+      try {
+        exec(`start "" "${target}"`)
+        return ok(`☕ 已帮你打开：${target}`)
+      } catch (error) {
+        return { kind: 'error', text: `打不开目标：${error instanceof Error ? error.message : String(error)}` }
+      }
     },
   })
 
