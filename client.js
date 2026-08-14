@@ -158,8 +158,18 @@ window.__ModuleLoader__.load({
       color: '#16324f',
     }
 
+    const PET_CELL_WIDTH = 192
+    const PET_CELL_HEIGHT = 208
+    const PET_COLUMNS = 8
+    const PET_STATES = {
+      idle: { row: 0, durations: [420, 165, 165, 210, 210, 480] },
+      waiting: { row: 6, durations: [225, 225, 225, 225, 225, 390] },
+    }
+
     const DEFAULT_CONFIG = {
       image: null,
+      petJson: null,
+      spritesheetDataUrl: null,
       idleLines: [],
       thinkingLines: [],
       buttons: [
@@ -175,6 +185,8 @@ window.__ModuleLoader__.load({
         const saved = JSON.parse(raw)
         return {
           image: typeof saved.image === 'string' ? saved.image : null,
+          petJson: saved.petJson && typeof saved.petJson === 'object' ? saved.petJson : null,
+          spritesheetDataUrl: typeof saved.spritesheetDataUrl === 'string' ? saved.spritesheetDataUrl : null,
           idleLines: Array.isArray(saved.idleLines) ? saved.idleLines.filter((item) => typeof item === 'string') : [],
           thinkingLines: Array.isArray(saved.thinkingLines) ? saved.thinkingLines.filter((item) => typeof item === 'string') : [],
           buttons: Array.isArray(saved.buttons)
@@ -193,6 +205,7 @@ window.__ModuleLoader__.load({
       const [size, setSize] = useState(96)
       const [panelOpen, setPanelOpen] = useState(false)
       const [config, setConfig] = useState(loadConfig)
+      const [petFrame, setPetFrame] = useState(0)
       const running = useSession((snapshot) => snapshot.running)
       const dragRef = useRef(null)
       const movedRef = useRef(false)
@@ -224,6 +237,17 @@ window.__ModuleLoader__.load({
         } catch {}
       }, [config])
 
+      useEffect(() => {
+        if (!config.petJson || !config.spritesheetDataUrl) return
+        const durations = running ? PET_STATES.waiting.durations : PET_STATES.idle.durations
+        let index = 0
+        const id = setInterval(() => {
+          setPetFrame(index)
+          index = (index + 1) % durations.length
+        }, 160)
+        return () => clearInterval(id)
+      }, [running, config.petJson, config.spritesheetDataUrl])
+
       const save = (nextPos, nextSize) => {
         try {
           localStorage.setItem('dsh-funpack-pet', JSON.stringify({
@@ -240,6 +264,7 @@ window.__ModuleLoader__.load({
         movedRef.current = false
         dragRef.current = {
           id: event.pointerId,
+          element: event.currentTarget,
           startX: event.clientX,
           startY: event.clientY,
           offsetX: event.clientX - rect.left,
@@ -255,7 +280,7 @@ window.__ModuleLoader__.load({
         if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 3) {
           movedRef.current = true
         }
-        const outer = event.currentTarget.parentElement
+        const outer = drag.element.parentElement
         const outerRect = outer.getBoundingClientRect()
         const x = Math.max(0, Math.min(window.innerWidth - outerRect.width, event.clientX - drag.offsetX))
         const y = Math.max(0, Math.min(window.innerHeight - outerRect.height, event.clientY - drag.offsetY))
@@ -280,7 +305,7 @@ window.__ModuleLoader__.load({
       const handleClick = () => {
         if (movedRef.current) return
         setLine((current) => (current + 1) % lines.length)
-        if (!waving && !config.image) {
+        if (!waving && !config.image && !config.petJson) {
           setWaving(true)
           setTimeout(() => setWaving(false), 1400)
         }
@@ -294,6 +319,29 @@ window.__ModuleLoader__.load({
         reader.readAsDataURL(file)
       }
 
+      const onPetJsonFile = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(String(reader.result))
+            setConfig((current) => ({ ...current, petJson: parsed }))
+          } catch {}
+        }
+        reader.readAsText(file)
+      }
+
+      const onSpritesheetFile = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => setConfig((current) => ({ ...current, spritesheetDataUrl: String(reader.result) }))
+        reader.readAsDataURL(file)
+      }
+
+      const clearPetPackage = () => setConfig((current) => ({ ...current, petJson: null, spritesheetDataUrl: null }))
+
       const parseButtons = (text) => text.split('\n').map((raw) => {
         const idx = raw.indexOf(',')
         if (idx === -1) return null
@@ -305,6 +353,8 @@ window.__ModuleLoader__.load({
       const resetConfig = () => {
         setConfig({
           image: null,
+          petJson: null,
+          spritesheetDataUrl: null,
           idleLines: [],
           thinkingLines: [],
           buttons: [
@@ -319,11 +369,36 @@ window.__ModuleLoader__.load({
       const lines = running ? thinkingLines : idleLines
       const text = lines[line % lines.length]
       const petImage = config.image || (waving ? PET_WAVING : PET_IDLE)
+      const petWidth = size
+      const petHeight = Math.round((size * 208) / 192)
+      const petScale = size / PET_CELL_WIDTH
+      const sheetRows = config.petJson && config.petJson.spriteVersionNumber === 2 ? 11 : 9
+      const petRow = running ? PET_STATES.waiting.row : PET_STATES.idle.row
+      const petCol = petFrame % PET_COLUMNS
+      const spritesheetStyle = {
+        width: PET_CELL_WIDTH * petScale,
+        height: PET_CELL_HEIGHT * petScale,
+        backgroundImage: `url(${config.spritesheetDataUrl})`,
+        backgroundSize: `${PET_CELL_WIDTH * PET_COLUMNS * petScale}px ${PET_CELL_HEIGHT * sheetRows * petScale}px`,
+        backgroundPosition: `${-petCol * PET_CELL_WIDTH * petScale}px ${-petRow * PET_CELL_HEIGHT * petScale}px`,
+        imageRendering: 'pixelated',
+        display: 'block',
+        pointerEvents: 'none',
+        filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))',
+      }
+      const petElement = config.petJson && config.spritesheetDataUrl
+        ? createElement('div', { style: spritesheetStyle })
+        : createElement('img', {
+            src: petImage,
+            alt: '\u684c\u5ba0',
+            width: petWidth,
+            height: petHeight,
+            draggable: false,
+            style: { display: 'block', pointerEvents: 'none', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))' },
+          })
       const containerStyle = pos === null
         ? { ...petBaseStyle, right: 16, bottom: 16 }
         : { ...petBaseStyle, left: pos.x, top: pos.y }
-      const petWidth = size
-      const petHeight = Math.round((size * 208) / 192)
       return createPortal(
         createElement('div', { style: containerStyle },
           panelOpen ? createElement('div', { style: panelStyle },
@@ -332,6 +407,12 @@ window.__ModuleLoader__.load({
             createElement('div', { style: { display: 'flex', gap: 4 } },
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setConfig((current) => ({ ...current, image: null })) }, '默认形象'),
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: resetConfig }, '重置全部'),
+            ),
+            createElement('div', { style: configLabelStyle }, '\u5ba0\u7269\u5305\uff08pet.json + spritesheet\uff09'),
+            createElement('input', { type: 'file', accept: '.json,application/json', onChange: onPetJsonFile, style: { width: '100%' } }),
+            createElement('input', { type: 'file', accept: 'image/*', onChange: onSpritesheetFile, style: { width: '100%' } }),
+            createElement('div', { style: { display: 'flex', gap: 4 } },
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '\u6e05\u9664\u5ba0\u7269\u5305'),
             ),
             createElement('div', { style: configLabelStyle }, '空闲台词（每行一条）'),
             createElement('textarea', {
@@ -381,14 +462,7 @@ window.__ModuleLoader__.load({
             onPointerDown: startMove,
             onClick: handleClick,
           },
-            createElement('img', {
-              src: petImage,
-              alt: '桌宠',
-              width: petWidth,
-              height: petHeight,
-              draggable: false,
-              style: { display: 'block', pointerEvents: 'none', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))' },
-            }),
+            petElement,
           ),
         ),
         document.body,

@@ -68,6 +68,7 @@ dsh plugin --profile web add ./dsh-funpack
 点击桌宠旁的 `⚙` 打开设置面板：
 
 - 形象：上传 GIF/PNG/WebP，或使用默认鲸鱼娘；支持动态和静态图片
+- 宠物包：上传 `pet.json` + `spritesheet.webp/png`，直接加载 HatchPet/Codex 宠物包生态的现成动态宠物
 - 空闲台词：每行一条，用户空闲时由桌宠随机轮播
 - 思考台词：每行一条，DeepSeek 思考时切换
 - 互动键：每行一个 `名称,命令`，点击直接执行
@@ -81,3 +82,5 @@ MIT
 ## 素材致谢
 
 桌宠 GIF 素材来自 [@linxin666/dsh-pet](https://www.npmjs.com/package/@linxin666/dsh-pet)（BSD-3-Clause，Copyright (c) 2026 zhu1090093659）。
+
+宠物包播放格式参照 HatchPet 的 [Codex V2 Pet Contract](https://github.com/srwang0506/HatchPet-CapybaraLulu/blob/main/hatch-pet/references/codex-pet-contract.md)（8 列 × 9/11 行图集）。
