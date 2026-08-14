@@ -40,6 +40,20 @@ const BREAK_TIPS = [
   '做三个深呼吸，然后继续把世界修好。',
 ]
 
+const PET_RESPONSES = [
+  '你轻轻摸了摸桌宠的头，它舒服地眯起眼睛。',
+  '桌宠蹭了蹭你的手心，心情 +100。',
+  '摸头成功，桌宠开始原地转圈。',
+  '它假装不情愿，但尾巴已经摇起来了。',
+]
+
+const FEED_RESPONSES = [
+  '你喂了一小块饼干，桌宠眼睛都亮了。',
+  '桌宠小口小口吃掉了投喂，元气恢复。',
+  '投喂成功，它决定多陪你五分钟。',
+  '它叼走零食，满意地打了个小嗝。',
+]
+
 const PERSONAS = {
   default: {
     label: '默认',
@@ -227,6 +241,22 @@ export function apply(ctx) {
     description: '随机一条休息/摸鱼建议',
     handler() {
       return ok(`☕ ${pick(BREAK_TIPS)}`)
+    },
+  })
+
+  ctx.commands.register({
+    name: 'pet',
+    description: '摸摸桌宠的头',
+    handler() {
+      return ok(`🐾 ${pick(PET_RESPONSES)}`)
+    },
+  })
+
+  ctx.commands.register({
+    name: 'feed',
+    description: '给桌宠喂食',
+    handler() {
+      return ok(`🍪 ${pick(FEED_RESPONSES)}`)
     },
   })
 

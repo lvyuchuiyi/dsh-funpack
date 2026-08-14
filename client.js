@@ -185,16 +185,29 @@ window.__ModuleLoader__.load({
       '别急别急，答案马上就来啦！',
     ]
 
+    const DEFAULT_BUTTONS = [
+      { label: '摸头', command: '/pet' },
+      { label: '喂食', command: '/feed' },
+    ]
+
+    const OLD_DEFAULT_BUTTONS = [
+      { label: '摸头', command: '/praise' },
+      { label: '喂食', command: '/break' },
+    ]
+
+    const sanitizeButtons = (value) => {
+      if (!Array.isArray(value)) return DEFAULT_BUTTONS
+      const buttons = value.filter((item) => item && typeof item.label === 'string' && typeof item.command === 'string')
+      return JSON.stringify(buttons) === JSON.stringify(OLD_DEFAULT_BUTTONS) ? DEFAULT_BUTTONS : buttons
+    }
+
     const DEFAULT_CONFIG = {
       image: null,
       petJson: null,
       spritesheetDataUrl: null,
       idleLines: [],
       thinkingLines: [],
-      buttons: [
-        { label: '摸头', command: '/praise' },
-        { label: '喂食', command: '/break' },
-      ],
+      buttons: DEFAULT_BUTTONS,
     }
 
     const loadConfig = () => {
@@ -208,9 +221,7 @@ window.__ModuleLoader__.load({
           spritesheetDataUrl: typeof saved.spritesheetDataUrl === 'string' ? saved.spritesheetDataUrl : null,
           idleLines: Array.isArray(saved.idleLines) ? saved.idleLines.filter((item) => typeof item === 'string') : [],
           thinkingLines: Array.isArray(saved.thinkingLines) ? saved.thinkingLines.filter((item) => typeof item === 'string') : [],
-          buttons: Array.isArray(saved.buttons)
-            ? saved.buttons.filter((item) => item && typeof item.label === 'string' && typeof item.command === 'string')
-            : DEFAULT_CONFIG.buttons,
+          buttons: sanitizeButtons(saved.buttons),
         }
       } catch {
         return DEFAULT_CONFIG
@@ -396,10 +407,7 @@ window.__ModuleLoader__.load({
           spritesheetDataUrl: null,
           idleLines: [],
           thinkingLines: [],
-          buttons: [
-            { label: '摸头', command: '/praise' },
-            { label: '喂食', command: '/break' },
-          ],
+          buttons: DEFAULT_BUTTONS,
         })
       }
 

@@ -48,6 +48,8 @@ dsh plugin --profile web add ./dsh-funpack
 | `/pomodoro-status` | 查看剩余时间 |
 | `/pomodoro-stop` | 停止番茄钟 |
 | `/break` | 随机一条休息建议 |
+| `/pet` | 摸摸桌宠的头 |
+| `/feed` | 给桌宠喂食 |
 | `/persona` | 查看或切换 AI 说话人设 |
 
 ## 人设
