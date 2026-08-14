@@ -1,7 +1,7 @@
 window.__ModuleLoader__.load({
   id: 'dsh-funpack',
   factory(require) {
-    const { createElement, useEffect, useLayoutEffect, useRef, useState } = require('react')
+    const { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState } = require('react')
     const { createPortal } = require('react-dom')
 
     const BUTTONS = [
@@ -12,6 +12,182 @@ window.__ModuleLoader__.load({
       { label: '🎭 人设', command: '/persona' },
       { label: '☕ 摸鱼', command: '/break' },
     ]
+
+    const BUTTON_MODULES = BUTTONS.map((button) => ({
+      key: button.command,
+      label: button.label,
+      command: button.command,
+      enabled: true,
+    }))
+
+    const BEAUTY_PRESETS = [
+      {
+        id: 'deep',
+        label: '深空',
+        vars: {
+          '--fp-bg': '#0b1220',
+          '--fp-panel': '#10161f',
+          '--fp-panel2': '#182130',
+          '--fp-border': '#2a3546',
+          '--fp-text': '#e6edf3',
+          '--fp-dim': '#8b98a9',
+          '--fp-accent': '#3b82f6',
+        },
+      },
+      {
+        id: 'sakura',
+        label: '樱花',
+        vars: {
+          '--fp-bg': '#241220',
+          '--fp-panel': '#2d1726',
+          '--fp-panel2': '#3d2033',
+          '--fp-border': '#59314a',
+          '--fp-text': '#ffeef7',
+          '--fp-dim': '#d9a9bf',
+          '--fp-accent': '#ec4899',
+        },
+      },
+      {
+        id: 'mint',
+        label: '薄荷',
+        vars: {
+          '--fp-bg': '#0c1f1b',
+          '--fp-panel': '#102820',
+          '--fp-panel2': '#17352b',
+          '--fp-border': '#245045',
+          '--fp-text': '#e9fff6',
+          '--fp-dim': '#9dc9b8',
+          '--fp-accent': '#10b981',
+        },
+      },
+      {
+        id: 'terminal',
+        label: '终端',
+        vars: {
+          '--fp-bg': '#0a0f0a',
+          '--fp-panel': '#101710',
+          '--fp-panel2': '#182418',
+          '--fp-border': '#2c402c',
+          '--fp-text': '#d6f5d6',
+          '--fp-dim': '#7fa87f',
+          '--fp-accent': '#22c55e',
+        },
+      },
+      {
+        id: 'paper',
+        label: '纸白',
+        vars: {
+          '--fp-bg': '#f6f7fb',
+          '--fp-panel': '#ffffff',
+          '--fp-panel2': '#eef1f6',
+          '--fp-border': '#d9dee8',
+          '--fp-text': '#1f2937',
+          '--fp-dim': '#6b7280',
+          '--fp-accent': '#2563eb',
+        },
+      },
+    ]
+
+    const BEAUTY_FITS = ['stretch', 'fill', 'center', 'tile']
+    const BEAUTY_FIT_LABELS = { stretch: '拉伸', fill: '填充', center: '居中', tile: '平铺' }
+    const BEAUTY_FIT_SIZES = { stretch: '100% 100%', fill: 'cover', center: 'auto', tile: 'auto' }
+    const BEAUTY_FIT_REPEATS = { stretch: 'no-repeat', fill: 'no-repeat', center: 'no-repeat', tile: 'repeat' }
+    const BEAUTY_STYLE_ID = 'dsh-funpack-beauty-style'
+
+    const DEFAULT_BEAUTY = {
+      theme: 'deep',
+      bgImage: null,
+      bgFit: 'fill',
+      bgAlpha: 85,
+      tint: 45,
+      buttonScale: 110,
+      buttonAlign: 'center',
+      modules: BUTTON_MODULES.map((module) => ({ ...module })),
+    }
+
+    const beautyClamp = (value, min, max, fallback) => {
+      const number = Number(value)
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback
+    }
+
+    const loadBeauty = () => {
+      const defaults = { ...DEFAULT_BEAUTY, modules: DEFAULT_BEAUTY.modules.map((module) => ({ ...module })) }
+      try {
+        const raw = localStorage.getItem('dsh-funpack-beauty-config')
+        if (!raw) return defaults
+        const saved = JSON.parse(raw)
+        return {
+          theme: BEAUTY_PRESETS.some((preset) => preset.id === saved.theme) ? saved.theme : defaults.theme,
+          bgImage: typeof saved.bgImage === 'string' ? saved.bgImage : null,
+          bgFit: BEAUTY_FITS.includes(saved.bgFit) ? saved.bgFit : defaults.bgFit,
+          bgAlpha: beautyClamp(saved.bgAlpha, 10, 100, defaults.bgAlpha),
+          tint: beautyClamp(saved.tint, 0, 90, defaults.tint),
+          buttonScale: beautyClamp(saved.buttonScale, 80, 160, defaults.buttonScale),
+          buttonAlign: ['left', 'center', 'right'].includes(saved.buttonAlign) ? saved.buttonAlign : defaults.buttonAlign,
+          modules: BUTTON_MODULES.map((def) => {
+            const savedModule = Array.isArray(saved.modules)
+              ? saved.modules.find((module) => module && module.key === def.key)
+              : null
+            return {
+              key: def.key,
+              label: savedModule?.label || def.label,
+              command: savedModule?.command || def.command,
+              enabled: savedModule ? savedModule.enabled !== false : true,
+            }
+          }),
+        }
+      } catch {
+        return defaults
+      }
+    }
+
+    const applyBeauty = (beauty) => {
+      const preset = BEAUTY_PRESETS.find((item) => item.id === beauty.theme) || BEAUTY_PRESETS[0]
+      const root = document.documentElement
+      for (const [name, value] of Object.entries(preset.vars)) {
+        root.style.setProperty(name, value)
+      }
+      root.style.setProperty('--fp-bg-image', beauty.bgImage ? `url("${beauty.bgImage}")` : 'none')
+      root.style.setProperty('--fp-bg-size', BEAUTY_FIT_SIZES[beauty.bgFit] || 'cover')
+      root.style.setProperty('--fp-bg-repeat', BEAUTY_FIT_REPEATS[beauty.bgFit] || 'no-repeat')
+      root.style.setProperty('--fp-bg-alpha', String(beauty.bgAlpha / 100))
+      root.style.setProperty('--fp-bg-tint', String(1 - beauty.tint / 200))
+
+      let layer = document.getElementById('dsh-funpack-bg-layer')
+      if (!layer) {
+        layer = document.createElement('div')
+        layer.id = 'dsh-funpack-bg-layer'
+        document.body.prepend(layer)
+      }
+
+      let style = document.getElementById(BEAUTY_STYLE_ID)
+      if (!style) {
+        style = document.createElement('style')
+        style.id = BEAUTY_STYLE_ID
+        document.head.appendChild(style)
+      }
+      style.textContent = `
+        #dsh-funpack-bg-layer {
+          position: fixed; inset: 0; z-index: 0; pointer-events: none;
+          background-image: var(--fp-bg-image); background-size: var(--fp-bg-size);
+          background-repeat: var(--fp-bg-repeat); background-position: center;
+          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint));
+        }
+        html, body, [class*="CgV-4G_frame"], [class*="cw98ZW_root"], [class*="cw98ZW_scrollBody"] {
+          background-color: transparent !important;
+        }
+        [class*="cw98ZW_root"] { position: relative; }
+        [class*="cw98ZW_root"]::before {
+          content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+          background-image: var(--fp-bg-image); background-size: var(--fp-bg-size);
+          background-repeat: var(--fp-bg-repeat); background-position: center;
+          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint));
+        }
+        [class*="HIpiuG_card"], [class*="HIpiuG_grow"], [class*="HIpiuG_scroll"], textarea.HIpiuG_input {
+          background: transparent !important;
+        }
+      `
+    }
 
     const IDLE_LINES = [
       '蓝色大肥鱼正在偷吃你的 token……',
@@ -39,12 +215,13 @@ window.__ModuleLoader__.load({
       flexWrap: 'wrap',
       gap: '6px',
       padding: '6px 0 0',
+      alignItems: 'center',
     }
     const buttonStyle = {
-      border: '1px solid rgba(128,128,128,.35)',
+      border: '1px solid var(--fp-border, rgba(128,128,128,.35))',
       borderRadius: '6px',
-      background: 'rgba(128,128,128,.08)',
-      color: 'inherit',
+      background: 'var(--fp-panel2, rgba(128,128,128,.08))',
+      color: 'var(--fp-text, inherit)',
       fontSize: '12px',
       lineHeight: '20px',
       padding: '1px 8px',
@@ -58,6 +235,16 @@ window.__ModuleLoader__.load({
 
     function FunButtons({ run }) {
       const [error, setError] = useState(null)
+      const [beautyOpen, setBeautyOpen] = useState(false)
+      const [beauty, setBeauty] = useState(loadBeauty)
+
+      useEffect(() => {
+        try {
+          localStorage.setItem('dsh-funpack-beauty-config', JSON.stringify(beauty))
+        } catch {}
+        applyBeauty(beauty)
+      }, [beauty])
+
       const click = (command) => {
         setError(null)
         run(command).then((failure) => {
@@ -66,16 +253,62 @@ window.__ModuleLoader__.load({
           setError(reason instanceof Error ? reason.message : String(reason))
         })
       }
-      return createElement(
+
+      const updateBeauty = (patch) => setBeauty((current) => ({ ...current, ...patch }))
+      const moveModule = (key, delta) => setBeauty((current) => {
+        const modules = current.modules.map((module) => ({ ...module }))
+        const at = modules.findIndex((module) => module.key === key)
+        const to = at + delta
+        if (at === -1 || to < 0 || to >= modules.length) return current
+        const [item] = modules.splice(at, 1)
+        modules.splice(to, 0, item)
+        return { ...current, modules }
+      })
+      const resetBeauty = () => setBeauty({
+        ...DEFAULT_BEAUTY,
+        modules: DEFAULT_BEAUTY.modules.map((module) => ({ ...module })),
+      })
+
+      const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' }
+      const scale = beauty.buttonScale / 100
+      const enabledModules = beauty.modules.filter((module) => module.enabled)
+      const row = createElement(
         'div',
-        { style: rowStyle },
-        BUTTONS.map((button) => createElement('button', {
-          key: button.command,
+        { style: { ...rowStyle, justifyContent: alignMap[beauty.buttonAlign] } },
+        enabledModules.map((button) => createElement('button', {
+          key: button.key,
           type: 'button',
-          style: buttonStyle,
+          style: {
+            ...buttonStyle,
+            fontSize: `${Math.round(12 * scale)}px`,
+            lineHeight: `${Math.round(20 * scale)}px`,
+            padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+          },
           onClick: () => click(button.command),
         }, button.label)),
+        createElement('button', {
+          key: 'beauty',
+          type: 'button',
+          style: {
+            ...buttonStyle,
+            fontSize: `${Math.round(12 * scale)}px`,
+            lineHeight: `${Math.round(20 * scale)}px`,
+            padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+          },
+          onClick: () => setBeautyOpen((open) => !open),
+        }, '🎨 美化'),
         error === null ? null : createElement('span', { style: errorStyle, role: 'status' }, error),
+      )
+
+      return createElement(Fragment, null,
+        row,
+        beautyOpen ? createPortal(createElement(BeautyPanel, {
+          beauty,
+          update: updateBeauty,
+          move: moveModule,
+          reset: resetBeauty,
+          onClose: () => setBeautyOpen(false),
+        }), document.body) : null,
       )
     }
 
@@ -90,12 +323,12 @@ window.__ModuleLoader__.load({
       userSelect: 'none',
     }
     const bubbleStyle = {
-      background: 'rgba(255,255,255,.96)',
-      border: '1px solid rgba(74,144,217,.35)',
+      background: 'var(--fp-panel, rgba(255,255,255,.96))',
+      border: '1px solid var(--fp-border, rgba(74,144,217,.35))',
       borderRadius: 10,
       padding: '6px 10px',
       fontSize: 12,
-      color: '#16324f',
+      color: 'var(--fp-text, #16324f)',
       boxShadow: '0 2px 10px rgba(0,0,0,.12)',
       maxWidth: 220,
       lineHeight: 1.5,
@@ -112,17 +345,17 @@ window.__ModuleLoader__.load({
       height: 22,
       minWidth: 22,
       lineHeight: '20px',
-      border: '1px solid rgba(74,144,217,.4)',
+      border: '1px solid var(--fp-border, rgba(74,144,217,.4))',
       borderRadius: 6,
-      background: 'rgba(255,255,255,.92)',
-      color: '#16324f',
+      background: 'var(--fp-panel2, rgba(255,255,255,.92))',
+      color: 'var(--fp-text, #16324f)',
       fontSize: 12,
       cursor: 'pointer',
       padding: '0 6px',
     }
     const panelStyle = {
-      background: 'rgba(255,255,255,.98)',
-      border: '1px solid rgba(74,144,217,.35)',
+      background: 'var(--fp-panel, rgba(255,255,255,.98))',
+      border: '1px solid var(--fp-border, rgba(74,144,217,.35))',
       borderRadius: 10,
       boxShadow: '0 4px 16px rgba(0,0,0,.14)',
       padding: 10,
@@ -131,6 +364,7 @@ window.__ModuleLoader__.load({
       display: 'flex',
       flexDirection: 'column',
       gap: 6,
+      color: 'var(--fp-text, #16324f)',
     }
     const textareaStyle = {
       width: '100%',
@@ -138,16 +372,18 @@ window.__ModuleLoader__.load({
       fontSize: 12,
       fontFamily: 'inherit',
       borderRadius: 6,
-      border: '1px solid rgba(74,144,217,.3)',
+      border: '1px solid var(--fp-border, rgba(74,144,217,.3))',
       padding: '4px 6px',
       resize: 'vertical',
+      background: 'var(--fp-panel2, rgba(255,255,255,.98))',
+      color: 'var(--fp-text, #16324f)',
     }
     const smallButtonStyle = {
       height: 24,
-      border: '1px solid rgba(74,144,217,.4)',
+      border: '1px solid var(--fp-border, rgba(74,144,217,.4))',
       borderRadius: 6,
-      background: '#eaf3ff',
-      color: '#16324f',
+      background: 'var(--fp-panel2, #eaf3ff)',
+      color: 'var(--fp-text, #16324f)',
       fontSize: 12,
       cursor: 'pointer',
       padding: '0 8px',
@@ -155,7 +391,176 @@ window.__ModuleLoader__.load({
     const configLabelStyle = {
       fontSize: 12,
       fontWeight: 600,
-      color: '#16324f',
+      color: 'var(--fp-text, #16324f)',
+    }
+
+    const beautyPanelStyle = {
+      position: 'fixed',
+      left: 16,
+      bottom: 16,
+      zIndex: 10000,
+      width: 320,
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      background: 'var(--fp-panel, #10161f)',
+      border: '1px solid var(--fp-border, #2a3546)',
+      borderRadius: 12,
+      boxShadow: '0 16px 40px rgba(0,0,0,.35)',
+      padding: 12,
+      color: 'var(--fp-text, #e6edf3)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      pointerEvents: 'auto',
+      fontSize: 13,
+      fontFamily: 'inherit',
+    }
+    const beautyLabelStyle = {
+      color: 'var(--fp-dim, #8b98a9)',
+      fontSize: 12,
+    }
+    const beautyRowStyle = {
+      display: 'grid',
+      gridTemplateColumns: '82px 1fr 46px',
+      alignItems: 'center',
+      gap: 8,
+    }
+    const beautyValueStyle = {
+      textAlign: 'right',
+      color: 'var(--fp-text, #e6edf3)',
+      fontVariantNumeric: 'tabular-nums',
+    }
+    const beautySliderStyle = {
+      width: '100%',
+      accentColor: 'var(--fp-accent, #3b82f6)',
+    }
+    const beautyMiniButtonStyle = {
+      height: 22,
+      minWidth: 22,
+      border: '1px solid var(--fp-border, #2a3546)',
+      borderRadius: 5,
+      background: 'var(--fp-panel2, #182130)',
+      color: 'var(--fp-text, #e6edf3)',
+      fontSize: 12,
+      lineHeight: '20px',
+      cursor: 'pointer',
+      padding: 0,
+    }
+    const beautyFileButtonStyle = {
+      ...smallButtonStyle,
+      textAlign: 'center',
+      display: 'grid',
+      placeItems: 'center',
+    }
+
+    function BeautyPanel({ beauty, update, move, reset, onClose }) {
+      const onBgFile = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => update({ bgImage: String(reader.result) })
+        reader.readAsDataURL(file)
+      }
+
+      const rangeRow = (label, value, min, max, onChange) => createElement('div', { style: beautyRowStyle },
+        createElement('span', { style: beautyLabelStyle }, label),
+        createElement('input', {
+          type: 'range',
+          min,
+          max,
+          value,
+          style: beautySliderStyle,
+          onChange: (event) => onChange(Number(event.target.value)),
+        }),
+        createElement('span', { style: beautyValueStyle }, `${value}%`),
+      )
+
+      const alignOptions = [
+        { value: 'left', label: '靠左' },
+        { value: 'center', label: '居中' },
+        { value: 'right', label: '靠右' },
+      ]
+
+      return createElement('div', { id: 'dsh-funpack-beauty-panel', style: beautyPanelStyle },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, '美化面板'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: onClose }, '✕'),
+        ),
+        createElement('div', { style: configLabelStyle }, '主题'),
+        createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+          BEAUTY_PRESETS.map((preset) => createElement('button', {
+            key: preset.id,
+            type: 'button',
+            style: {
+              ...smallButtonStyle,
+              borderColor: preset.id === beauty.theme ? 'var(--fp-accent, #3b82f6)' : 'var(--fp-border, #2a3546)',
+              background: preset.id === beauty.theme ? 'var(--fp-accent, #3b82f6)' : 'var(--fp-panel2, #182130)',
+              color: preset.id === beauty.theme ? '#ffffff' : 'var(--fp-text, #e6edf3)',
+            },
+            onClick: () => update({ theme: preset.id }),
+          }, preset.label)),
+        ),
+        createElement('div', { style: configLabelStyle }, '背景图片'),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '背景图片'),
+          createElement('label', { style: beautyFileButtonStyle },
+            '选择图片',
+            createElement('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: onBgFile }),
+          ),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => update({ bgImage: null }) }, '清除'),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '铺放方式'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.bgFit,
+            onChange: (event) => update({ bgFit: event.target.value }),
+          }, BEAUTY_FITS.map((fit) => createElement('option', { key: fit, value: fit }, BEAUTY_FIT_LABELS[fit]))),
+          createElement('span', { style: beautyValueStyle }, BEAUTY_FIT_LABELS[beauty.bgFit]),
+        ),
+        rangeRow('透明度', beauty.bgAlpha, 10, 100, (value) => update({ bgAlpha: value })),
+        rangeRow('暗色蒙层', beauty.tint, 0, 90, (value) => update({ tint: value })),
+        rangeRow('按钮缩放', beauty.buttonScale, 80, 160, (value) => update({ buttonScale: value })),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '按钮对齐'),
+          createElement('div', { style: { display: 'flex', gap: 4 } },
+            alignOptions.map((option) => createElement('button', {
+              key: option.value,
+              type: 'button',
+              style: {
+                ...beautyMiniButtonStyle,
+                flex: 1,
+                background: beauty.buttonAlign === option.value ? 'var(--fp-accent, #3b82f6)' : 'var(--fp-panel2, #182130)',
+                color: beauty.buttonAlign === option.value ? '#ffffff' : 'var(--fp-text, #e6edf3)',
+              },
+              onClick: () => update({ buttonAlign: option.value }),
+            }, option.label)),
+          ),
+          createElement('span', { style: beautyValueStyle }, alignOptions.find((option) => option.value === beauty.buttonAlign)?.label),
+        ),
+        createElement('div', { style: configLabelStyle }, '快捷按钮模块'),
+        createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+          beauty.modules.map((module) => createElement('div', { key: module.key, style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            createElement('input', {
+              type: 'checkbox',
+              checked: module.enabled,
+              onChange: (event) => update({
+                modules: beauty.modules.map((item) => item.key === module.key ? { ...item, enabled: event.target.checked } : item),
+              }),
+            }),
+            createElement('span', { style: { flex: 1, color: 'var(--fp-text, #e6edf3)' } }, module.label),
+            createElement('button', { type: 'button', style: beautyMiniButtonStyle, onClick: () => move(module.key, -1) }, '↑'),
+            createElement('button', { type: 'button', style: beautyMiniButtonStyle, onClick: () => move(module.key, 1) }, '↓'),
+          )),
+        ),
+        createElement('button', { type: 'button', style: { ...smallButtonStyle, width: '100%' }, onClick: reset }, '恢复默认'),
+      )
     }
 
     const PET_CELL_WIDTH = 192
