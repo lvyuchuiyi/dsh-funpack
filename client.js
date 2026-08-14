@@ -1985,10 +1985,13 @@ window.__ModuleLoader__.load({
       )
     }
 
+    const SENKO_MODEL_URL = 'https://cdn.jsdelivr.net/gh/Eikanya/Live2d-model@master/Live2D/Senko_Normals/senko.model3.json'
+
     const MARKET_PRESETS = [
       { id: 'pet-default', kind: 'pet', pet: 'default', title: '蓝鱼娘', desc: '内置 DeepSeek 娘 GIF 形象' },
       { id: 'pet-taffy', kind: 'pet', pet: 'taffy', title: '塔菲', desc: 'Codex 社区塔菲宠物包' },
       { id: 'live2d-haru', kind: 'live2d', live2dUrl: 'https://raw.githubusercontent.com/Live2D/CubismWebSamples/develop/Samples/Resources/Haru/Haru.model3.json', title: 'Haru Live2D', desc: 'Live2D 官方测试模型，需要联网加载' },
+      { id: 'live2d-senko', kind: 'live2d', live2dUrl: SENKO_MODEL_URL, title: '仙狐 Senko', desc: '热门狐娘 Live2D 桌宠，社区模型包直连' },
       { id: 'theme-deep', kind: 'theme', theme: 'deep', title: '深空', desc: '默认深色主题' },
       { id: 'theme-sakura', kind: 'theme', theme: 'sakura', title: '樱花', desc: '粉白樱色主题' },
       { id: 'theme-mint', kind: 'theme', theme: 'mint', title: '薄荷', desc: '清爽薄荷主题' },
@@ -2276,6 +2279,20 @@ window.__ModuleLoader__.load({
       manifestUrl: '/dsh-funpack/taffy/pet.json',
       spritesheetUrl: '/dsh-funpack/taffy/spritesheet.webp',
     }
+
+    const SENKO_IDLE_LINES = [
+      '仙狐正在偷偷观察你写代码哦～',
+      '累了就摸鱼吧，我会帮你望风的！',
+      '今天的尾巴状态：蓬松度 100%。',
+      '代码报错了？让仙狐来亲亲你的屏幕～',
+    ]
+
+    const SENKO_THINKING_LINES = [
+      '仙狐也在认真思考这个问题哦～',
+      'DeepSeek 正在努力转脑子，别急！',
+      '嘘，答案马上就从尾巴尖蹦出来啦。',
+      '思考中……先吃一口团子再说。',
+    ]
 
     const TAFFY_IDLE_LINES = [
       '塔菲在偷看你写代码哦～',
@@ -2601,6 +2618,19 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const applySenkoPreset = () => {
+        setPresetError(null)
+        setConfig((current) => ({
+          ...current,
+          image: null,
+          petJson: null,
+          spritesheetDataUrl: null,
+          live2dModelUrl: SENKO_MODEL_URL,
+          idleLines: current.idleLines.length > 0 ? current.idleLines : SENKO_IDLE_LINES,
+          thinkingLines: current.thinkingLines.length > 0 ? current.thinkingLines : SENKO_THINKING_LINES,
+        }))
+      }
+
       const startLive2d = async () => {
         if (!config.live2dModelUrl) return
         setLive2dError(null)
@@ -2620,7 +2650,7 @@ window.__ModuleLoader__.load({
           container.appendChild(app.view)
           const model = await Promise.race([
             Live2DModelClass.from(config.live2dModelUrl, { autoInteract: false, motionPreload: 'IDLE' }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Live2D 模型加载超时')), 30000)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Live2D 模型加载超时')), 60000)),
           ])
           model.scale.set(Math.min(1, width / 420))
           model.x = width / 2
@@ -2698,6 +2728,8 @@ window.__ModuleLoader__.load({
               petJson: null,
               spritesheetDataUrl: null,
               live2dModelUrl: url,
+              idleLines: url === SENKO_MODEL_URL && current.idleLines.length === 0 ? SENKO_IDLE_LINES : current.idleLines,
+              thinkingLines: url === SENKO_MODEL_URL && current.thinkingLines.length === 0 ? SENKO_THINKING_LINES : current.thinkingLines,
             }))
           }
         }
@@ -2777,6 +2809,7 @@ window.__ModuleLoader__.load({
             createElement('input', { type: 'file', accept: 'image/*', onChange: onSpritesheetFile, style: { width: '100%' } }),
             createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: applyTaffyPreset }, '预设：塔菲 / Taffy'),
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: applySenkoPreset }, '预设：仙狐 / Senko'),
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '\u6e05\u9664\u5ba0\u7269\u5305'),
               presetError ? createElement('span', { style: errorStyle }, presetError) : null,
             ),

@@ -1,6 +1,6 @@
 {
   "name": "dsh-funpack",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "夸夸、运势、战报、番茄钟、摸鱼、沉浸氛围、桌宠语音、Live2D、Boss 隐身与代码花园一体化的 DeepSeek Harness 插件",
   "type": "module",
   "main": "index.js",

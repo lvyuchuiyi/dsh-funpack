@@ -77,7 +77,7 @@ dsh plugin --profile web add ./dsh-funpack
 
 - 形象：上传 GIF/PNG/WebP，或使用默认鲸鱼娘；支持动态和静态图片
 - 宠物包：上传 `pet.json` + `spritesheet.webp/png`，直接加载 HatchPet/Codex 宠物包生态的现成动态宠物
-- 内置预设：一键加载社区 Codex 宠物“塔菲 / Taffy”，无需手动上传
+- 内置预设：一键加载社区 Codex 宠物“塔菲 / Taffy”，或热门狐娘 Live2D“仙狐 / Senko”
 - 空闲台词：每行一条，用户空闲时由桌宠随机轮播
 - 思考台词：每行一条，DeepSeek 思考时切换
 - 互动键：每行一个 `名称,命令`，点击直接执行
@@ -90,6 +90,11 @@ dsh plugin --profile web add ./dsh-funpack
 桌宠设置面板里点 `预设：塔菲 / Taffy`，就会加载社区 Codex 宠物
 [Taffy / 塔菲](https://codex-pet.org/pets/taffy/) 的完整图集动画。资源随插件打包，
 离线也能用；切换时会顺带换成塔菲风格的空闲/思考台词，之后仍可继续自定义。
+
+## 内置仙狐预设
+
+桌宠设置面板或资产市场点 `预设：仙狐 / Senko`，会从社区 Live2D model collection
+直连加载热门狐娘模型，并自动切换成仙狐风格的空闲/思考台词。模型需要联网加载。
 
 ## 桌宠养成
 
@@ -145,7 +150,7 @@ dsh plugin --profile web add ./dsh-funpack
 `🧩 Fun` 中心里的 `资产市场` 会打开资产市场：
 
 - 内置宠物包：蓝鱼娘、塔菲
-- 内置 Live2D 包：Haru 官方测试模型
+- 内置 Live2D 包：Haru 官方测试模型、仙狐 Senko（社区热门狐娘）
 - 内置主题：深空、樱花、薄荷、终端、纸白
 - 内置人设包：大姐姐、小妹妹、抽象搞怪
 - 数据源：Oh-My-DSH 聚合目录（399+ 插件）或 GitHub dsh-plugin 主题
@@ -163,7 +168,7 @@ dsh plugin --profile web add ./dsh-funpack
 
 ## Live2D 娘化
 
-桌宠设置面板支持填写 `.model3.json` 链接，或从资产市场一键安装 Haru：
+桌宠设置面板支持填写 `.model3.json` 链接，或从资产市场一键安装 Haru / 仙狐 Senko：
 
 - 首次使用会从 CDN 加载 PIXI + Live2D 运行库
 - 支持 Cubism 2 和 Cubism 4 模型
