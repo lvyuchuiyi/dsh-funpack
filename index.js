@@ -34,6 +34,11 @@ const TITLES = [
   'IDE 常住居民',
 ]
 
+const seasonLabel = () => {
+  const now = new Date()
+  return `${now.getFullYear()} S${Math.floor(now.getMonth() / 3) + 1}`
+}
+
 const BREAK_TIPS = [
   '站起来伸个懒腰，代码不会因为你休息两分钟就跑掉。',
   '喝口水，看看窗外，眼睛也是要休息的。',
@@ -94,7 +99,7 @@ function pick(items) {
 }
 
 function makeStats() {
-  return { praise: 0, fortune: 0, report: 0, pomodoroDone: 0, pomodoroMin: 0 }
+  return { praise: 0, fortune: 0, report: 0, pomodoroDone: 0, pomodoroMin: 0, pet: 0, feed: 0, hug: 0, break: 0 }
 }
 
 export function apply(ctx) {
@@ -169,7 +174,7 @@ export function apply(ctx) {
   const reportText = (agent) => {
     const entry = statsFor(agent)
     entry.report += 1
-    const interactions = entry.praise + entry.fortune + entry.report
+    const interactions = entry.praise + entry.fortune + entry.report + entry.pet + entry.feed + entry.hug + entry.break
     return [
       '📊 今日战报',
       '',
@@ -215,6 +220,25 @@ export function apply(ctx) {
   })
 
   ctx.commands.register({
+    name: 'season',
+    description: '查看当前赛季的插件互动战绩',
+    handler({ agent }) {
+      const entry = statsFor(agent)
+      return ok([
+        `🏆 ${seasonLabel()} 赛季战报`,
+        '',
+        `- 夸我次数：${entry.praise}`,
+        `- 抽签次数：${entry.fortune}`,
+        `- 战报次数：${entry.report}`,
+        `- 番茄钟完成：${entry.pomodoroDone}，${entry.pomodoroMin} 分钟`,
+        `- 桌宠互动：${entry.pet + entry.feed + entry.hug}`,
+        '',
+        '赛季积分与成就卡请在「🏆 成就」面板查看。',
+      ].join('\n'))
+    },
+  })
+
+  ctx.commands.register({
     name: 'pomodoro',
     description: '开始一个番茄钟，例如 /pomodoro 25',
     input: { hint: '分钟数，默认 25' },
@@ -247,7 +271,8 @@ export function apply(ctx) {
   ctx.commands.register({
     name: 'break',
     description: '随机一条休息/摸鱼建议',
-    handler() {
+    handler({ agent }) {
+      statsFor(agent).break += 1
       return ok(`☕ ${pick(BREAK_TIPS)}`)
     },
   })
@@ -256,9 +281,10 @@ export function apply(ctx) {
     name: 'break-go',
     description: '打开自定义摸鱼目标：网址或本地程序路径',
     input: { hint: '网址或程序路径' },
-    handler({ rawInput }) {
+    handler({ agent, rawInput }) {
       const target = rawInput.trim()
       if (!target) return ok('☕ 没有设置摸鱼目标，请先在美化面板里填一个。')
+      statsFor(agent).break += 1
       try {
         const url = /^https?:\/\//i.test(target) || /^[^\s/]+\.\w{2,}/.test(target)
           ? (/^https?:\/\//i.test(target) ? target : `https://${target}`)
@@ -276,7 +302,8 @@ export function apply(ctx) {
   ctx.commands.register({
     name: 'pet',
     description: '摸摸桌宠的头',
-    handler() {
+    handler({ agent }) {
+      statsFor(agent).pet += 1
       return ok(`🐾 ${pick(PET_RESPONSES)}`)
     },
   })
@@ -284,7 +311,8 @@ export function apply(ctx) {
   ctx.commands.register({
     name: 'feed',
     description: '给桌宠喂食',
-    handler() {
+    handler({ agent }) {
+      statsFor(agent).feed += 1
       return ok(`🍪 ${pick(FEED_RESPONSES)}`)
     },
   })
@@ -292,7 +320,8 @@ export function apply(ctx) {
   ctx.commands.register({
     name: 'hug',
     description: '抱抱桌宠',
-    handler() {
+    handler({ agent }) {
+      statsFor(agent).hug += 1
       return ok(`🤗 ${pick(HUG_RESPONSES)}`)
     },
   })

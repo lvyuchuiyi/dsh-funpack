@@ -1,7 +1,7 @@
 {
   "name": "dsh-funpack",
-  "version": "0.6.0",
-  "description": "夸夸、运势、战报、番茄钟、摸鱼提醒一体化的轻量 DeepSeek Harness 插件",
+  "version": "0.7.0",
+  "description": "夸夸、运势、战报、番茄钟、摸鱼、沉浸氛围、成就赛季与资产市场一体化的 DeepSeek Harness 插件",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -27,7 +27,10 @@
     "dsh-plugin",
     "plugin",
     "fun",
-    "pomodoro"
+    "pomodoro",
+    "ambient",
+    "achievements",
+    "pet"
   ],
   "homepage": "https://github.com/lvyuchuiyi/dsh-funpack",
   "repository": {

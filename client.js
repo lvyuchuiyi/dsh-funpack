@@ -339,6 +339,354 @@ window.__ModuleLoader__.load({
     const DANMAKU_SPEED_IDS = Object.keys(DANMAKU_SPEEDS)
     const DANMAKU_SIZE_IDS = Object.keys(DANMAKU_SIZES)
 
+    const ATMOSPHERE_SCENES = [
+      { id: 'off', label: '安静', desc: '什么都不放，专心写码' },
+      { id: 'cafe', label: '咖啡雨声', desc: '窗边雨声 + 咖啡店暖噪' },
+      { id: 'server', label: '机房白噪', desc: '风扇与低频轰鸣' },
+      { id: 'cyber', label: '赛博脉冲', desc: '合成器脉冲 + 数字底噪' },
+      { id: 'lofi', label: 'Lo-Fi 节拍', desc: '慢速鼓点 + 温暖贝斯' },
+    ]
+    const ATMOSPHERE_IDS = ATMOSPHERE_SCENES.map((scene) => scene.id)
+    const ATMOSPHERE_KEY = 'dsh-funpack-atmosphere-config'
+    const audioState = { ctx: null, master: null, nodes: [], timer: null, scene: 'off' }
+
+    const loadAtmosphere = () => {
+      const defaults = { scene: 'off', volume: 60, autoLink: true }
+      try {
+        const raw = localStorage.getItem(ATMOSPHERE_KEY)
+        if (!raw) return defaults
+        const saved = JSON.parse(raw)
+        return {
+          scene: ATMOSPHERE_IDS.includes(saved.scene) ? saved.scene : defaults.scene,
+          volume: beautyClamp(saved.volume, 0, 100, defaults.volume),
+          autoLink: typeof saved.autoLink === 'boolean' ? saved.autoLink : defaults.autoLink,
+        }
+      } catch {
+        return defaults
+      }
+    }
+
+    const saveAtmosphere = (config) => {
+      try {
+        localStorage.setItem(ATMOSPHERE_KEY, JSON.stringify(config))
+      } catch {}
+    }
+
+    const ensureAudio = () => {
+      if (audioState.ctx) return audioState.ctx
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) return null
+      const ctx = new AudioContextClass()
+      const master = ctx.createGain()
+      master.gain.value = 0
+      master.connect(ctx.destination)
+      audioState.ctx = ctx
+      audioState.master = master
+      return ctx
+    }
+
+    const stopAtmosphere = () => {
+      if (audioState.timer) {
+        clearInterval(audioState.timer)
+        audioState.timer = null
+      }
+      for (const node of audioState.nodes) {
+        try { node.stop?.(0) } catch {}
+        try { node.disconnect?.() } catch {}
+      }
+      audioState.nodes = []
+      audioState.scene = 'off'
+      if (audioState.ctx && audioState.master) audioState.master.gain.value = 0
+    }
+
+    const makeNoiseBuffer = (ctx, seconds = 2) => {
+      const length = Math.max(1, Math.floor(ctx.sampleRate * seconds))
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
+      const data = buffer.getChannelData(0)
+      let last = 0
+      for (let i = 0; i < length; i += 1) {
+        const white = Math.random() * 2 - 1
+        last = (last + 0.02 * white) / 1.02
+        data[i] = last * 3.5
+      }
+      return buffer
+    }
+
+    const addNoise = (ctx, gainValue, filterType, frequency, q) => {
+      const source = ctx.createBufferSource()
+      source.buffer = makeNoiseBuffer(ctx, 2)
+      source.loop = true
+      const filter = ctx.createBiquadFilter()
+      filter.type = filterType || 'lowpass'
+      filter.frequency.value = frequency || 800
+      filter.Q.value = q || 0.6
+      const gain = ctx.createGain()
+      gain.gain.value = gainValue
+      source.connect(filter)
+      filter.connect(gain)
+      gain.connect(audioState.master)
+      source.start()
+      audioState.nodes.push(source, filter, gain)
+    }
+
+    const addPad = (ctx, frequency, gainValue, type = 'sine') => {
+      const osc = ctx.createOscillator()
+      osc.type = type
+      osc.frequency.value = frequency
+      const gain = ctx.createGain()
+      gain.gain.value = gainValue
+      osc.connect(gain)
+      gain.connect(audioState.master)
+      osc.start()
+      audioState.nodes.push(osc, gain)
+    }
+
+    const startAtmosphere = (scene, volume) => {
+      const ctx = ensureAudio()
+      if (!ctx) return
+      stopAtmosphere()
+      const gain = Math.max(0, Math.min(100, volume)) / 100
+      audioState.master.gain.value = gain * 0.7
+      audioState.scene = scene
+      if (scene === 'cafe') {
+        addNoise(ctx, 0.32, 'lowpass', 900, 0.4)
+        addNoise(ctx, 0.05, 'highpass', 2400, 0.8)
+        addPad(ctx, 110, 0.015)
+        addPad(ctx, 164.81, 0.012)
+        addPad(ctx, 220, 0.008)
+      } else if (scene === 'server') {
+        addPad(ctx, 60, 0.07)
+        addPad(ctx, 120, 0.02)
+        addNoise(ctx, 0.16, 'highpass', 500, 0.5)
+      } else if (scene === 'cyber') {
+        addNoise(ctx, 0.06, 'bandpass', 2600, 1.2)
+        audioState.timer = setInterval(() => {
+          const now = ctx.currentTime
+          const osc = ctx.createOscillator()
+          osc.type = 'square'
+          osc.frequency.setValueAtTime(55 + Math.random() * 40, now)
+          const envelope = ctx.createGain()
+          envelope.gain.setValueAtTime(0.0001, now)
+          envelope.gain.exponentialRampToValueAtTime(0.05, now + 0.02)
+          envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
+          osc.connect(envelope)
+          envelope.connect(audioState.master)
+          osc.start(now)
+          osc.stop(now + 0.15)
+        }, 420)
+      } else if (scene === 'lofi') {
+        addNoise(ctx, 0.025, 'lowpass', 1400, 0.7)
+        const bassNotes = [55, 55, 65.41, 49]
+        let beat = 0
+        audioState.timer = setInterval(() => {
+          const now = ctx.currentTime
+          const kick = ctx.createOscillator()
+          kick.type = 'sine'
+          kick.frequency.setValueAtTime(150, now)
+          kick.frequency.exponentialRampToValueAtTime(42, now + 0.12)
+          const kickGain = ctx.createGain()
+          kickGain.gain.setValueAtTime(0.16, now)
+          kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16)
+          kick.connect(kickGain)
+          kickGain.connect(audioState.master)
+          kick.start(now)
+          kick.stop(now + 0.2)
+
+          const hat = ctx.createBufferSource()
+          hat.buffer = makeNoiseBuffer(ctx, 0.1)
+          const hatFilter = ctx.createBiquadFilter()
+          hatFilter.type = 'highpass'
+          hatFilter.frequency.value = 6000
+          const hatGain = ctx.createGain()
+          hatGain.gain.setValueAtTime(0.045, now)
+          hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06)
+          hat.connect(hatFilter)
+          hatFilter.connect(hatGain)
+          hatGain.connect(audioState.master)
+          hat.start(now)
+          hat.stop(now + 0.1)
+
+          const bass = ctx.createOscillator()
+          bass.type = 'sawtooth'
+          bass.frequency.value = bassNotes[beat % bassNotes.length]
+          const bassFilter = ctx.createBiquadFilter()
+          bassFilter.type = 'lowpass'
+          bassFilter.frequency.value = 260
+          const bassGain = ctx.createGain()
+          bassGain.gain.setValueAtTime(0.035, now)
+          bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42)
+          bass.connect(bassFilter)
+          bassFilter.connect(bassGain)
+          bassGain.connect(audioState.master)
+          bass.start(now)
+          bass.stop(now + 0.45)
+          beat += 1
+        }, 450)
+      }
+    }
+
+    const applyAtmosphereConfig = (config) => {
+      const next = {
+        scene: ATMOSPHERE_IDS.includes(config.scene) ? config.scene : 'off',
+        volume: beautyClamp(config.volume, 0, 100, 60),
+        autoLink: typeof config.autoLink === 'boolean' ? config.autoLink : true,
+      }
+      saveAtmosphere(next)
+      if (next.scene === 'off') {
+        stopAtmosphere()
+      } else if (audioState.scene !== next.scene) {
+        startAtmosphere(next.scene, next.volume)
+      } else if (audioState.master) {
+        audioState.master.gain.value = (next.volume / 100) * 0.7
+      }
+      return next
+    }
+
+    const ACHIEVEMENTS_KEY = 'dsh-funpack-achievements'
+    const ACHIEVEMENTS = [
+      { id: 'first-praise', title: '第一句夸', desc: '使用「夸我」1 次', icon: '✨', check: (state) => state.stats.praise >= 1 },
+      { id: 'fortune-10', title: '玄学十连', desc: '抽签 10 次', icon: '🔮', check: (state) => state.stats.fortune >= 10 },
+      { id: 'report-1', title: '战报初体验', desc: '生成 1 次战报', icon: '📊', check: (state) => state.stats.report >= 1 },
+      { id: 'pomodoro-5', title: '番茄杀手', desc: '完成 5 个番茄钟', icon: '🍅', check: (state) => state.stats.pomodoro >= 5 },
+      { id: 'break-10', title: '摸鱼十级学者', desc: '摸鱼 10 次', icon: '🛋️', check: (state) => state.stats.break >= 10 },
+      { id: 'pet-lv2', title: '桌宠好友', desc: '桌宠好感达到 Lv.2', icon: '🐟', check: (state) => state.stats.petPoints >= 50 },
+      { id: 'pet-lv5', title: '灵魂绑定', desc: '桌宠好感达到 Lv.5', icon: '💙', check: (state) => state.stats.petPoints >= 500 },
+      { id: 'task-10', title: '任务收割机', desc: '完成 10 次任务', icon: '⚡', check: (state) => state.stats.task >= 10 },
+      { id: 'streak-3', title: '三天热度', desc: '连续使用 3 天', icon: '🔥', check: (state) => state.streak >= 3 },
+      { id: 'streak-7', title: '一周全勤', desc: '连续使用 7 天', icon: '👑', check: (state) => state.streak >= 7 },
+      { id: 'season-500', title: '赛季王者', desc: '赛季积分达到 500', icon: '🏆', check: (state) => state.season.points >= 500 },
+    ]
+    const SEASON_RANKS = [
+      { min: 0, title: '摸鱼青铜' },
+      { min: 120, title: '摸鱼白银' },
+      { min: 280, title: '摸鱼黄金' },
+      { min: 520, title: '摸鱼铂金' },
+      { min: 880, title: '摸鱼钻石' },
+      { min: 1400, title: '摸鱼王者' },
+    ]
+    const SEASON_POINTS = {
+      praise: 2,
+      fortune: 2,
+      report: 3,
+      pomodoro: 8,
+      break: 4,
+      pet: 1,
+      feed: 2,
+      hug: 2,
+      task: 6,
+      petPoints: 1,
+    }
+    const currentSeason = () => {
+      const now = new Date()
+      return `${now.getFullYear()}-S${Math.floor(now.getMonth() / 3) + 1}`
+    }
+    const pad2 = (value) => String(value).padStart(2, '0')
+    const dateKeyForOffset = (offset = 0) => {
+      const now = new Date(Date.now() + offset * 86400000)
+      return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+    }
+    const emptyActivity = () => ({
+      praise: 0,
+      fortune: 0,
+      report: 0,
+      pomodoro: 0,
+      pomodoroMin: 0,
+      break: 0,
+      pet: 0,
+      feed: 0,
+      hug: 0,
+      task: 0,
+      petPoints: 0,
+    })
+    const defaultAchievements = () => ({
+      stats: emptyActivity(),
+      season: { ...emptyActivity(), id: currentSeason(), points: 0 },
+      unlocked: [],
+      streak: 0,
+      lastActive: '',
+    })
+    const loadAchievements = () => {
+      const defaults = defaultAchievements()
+      try {
+        const raw = localStorage.getItem(ACHIEVEMENTS_KEY)
+        if (!raw) return defaults
+        const saved = JSON.parse(raw)
+        const seasonMatches = saved.season?.id === defaults.season.id
+        return {
+          stats: { ...defaults.stats, ...(saved.stats || {}) },
+          season: seasonMatches
+            ? { ...defaults.season, ...saved.season, points: beautyClamp(saved.season?.points, 0, 999999, 0) }
+            : defaults.season,
+          unlocked: Array.isArray(saved.unlocked) ? saved.unlocked.filter((id) => typeof id === 'string') : [],
+          streak: beautyClamp(saved.streak, 0, 999999, 0),
+          lastActive: typeof saved.lastActive === 'string' ? saved.lastActive : '',
+        }
+      } catch {
+        return defaults
+      }
+    }
+    const saveAchievements = (state) => {
+      try {
+        localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(state))
+      } catch {}
+    }
+    const seasonRank = (points) => {
+      let rank = SEASON_RANKS[0]
+      for (const item of SEASON_RANKS) {
+        if (points >= item.min) rank = item
+      }
+      return rank
+    }
+    const recordActivity = (type, amount = 1, extra = {}) => {
+      const state = loadAchievements()
+      const today = dateKeyForOffset()
+      const yesterday = dateKeyForOffset(-1)
+      if (state.lastActive !== today) {
+        state.streak = state.lastActive === yesterday ? state.streak + 1 : 1
+        state.lastActive = today
+      }
+      state.stats[type] = (state.stats[type] || 0) + amount
+      state.season[type] = (state.season[type] || 0) + amount
+      state.season.points += (SEASON_POINTS[type] || 1) * amount
+      if (extra.pomodoroMin) {
+        const minutes = Number(extra.pomodoroMin) || 0
+        state.stats.pomodoroMin = (state.stats.pomodoroMin || 0) + minutes
+        state.season.pomodoroMin = (state.season.pomodoroMin || 0) + minutes
+      }
+      const unlocked = []
+      for (const achievement of ACHIEVEMENTS) {
+        if (!state.unlocked.includes(achievement.id) && achievement.check(state)) {
+          state.unlocked.push(achievement.id)
+          unlocked.push(achievement)
+        }
+      }
+      saveAchievements(state)
+      window.dispatchEvent(new CustomEvent('dsh-funpack-achievements-change', { detail: { state } }))
+      if (unlocked.length > 0) {
+        window.dispatchEvent(new CustomEvent('dsh-funpack-unlock', {
+          detail: { titles: unlocked.map((achievement) => achievement.title) },
+        }))
+      }
+      return unlocked
+    }
+    const recordCommand = (command) => {
+      const pomodoro = command.match(/^\/pomodoro\s+(\d+)/)
+      if (pomodoro) return recordActivity('pomodoro', 1, { pomodoroMin: Number(pomodoro[1]) || 25 })
+      if (command === '/break' || command === '/break-go' || command.startsWith('/break-go ')) {
+        return recordActivity('break', 1)
+      }
+      const statMap = {
+        '/praise': 'praise',
+        '/fortune': 'fortune',
+        '/report': 'report',
+        '/pet': 'pet',
+        '/feed': 'feed',
+        '/hug': 'hug',
+      }
+      const key = statMap[command] || statMap[command.split(' ')[0]]
+      return key ? recordActivity(key, 1) : []
+    }
+
     const loadAffinity = () => {
       const defaults = { points: 0, pet: 0, feed: 0, hug: 0, task: 0 }
       try {
@@ -425,6 +773,10 @@ window.__ModuleLoader__.load({
       const [petVisible, setPetVisible] = useState(loadPetVisible)
       const [danmaku, setDanmaku] = useState([])
       const [breakTarget, setBreakTarget] = useState(() => localStorage.getItem('dsh-funpack-break-target') || '')
+      const [atmosphere, setAtmosphere] = useState(loadAtmosphere)
+      const [achievements, setAchievements] = useState(loadAchievements)
+      const [achievementOpen, setAchievementOpen] = useState(false)
+      const [marketOpen, setMarketOpen] = useState(false)
 
       useEffect(() => {
         try {
@@ -446,6 +798,24 @@ window.__ModuleLoader__.load({
         setTimeout(() => setDanmaku((list) => list.filter((item) => item.id !== id)), 8000)
       }
 
+      useEffect(() => {
+        const syncAchievements = () => setAchievements(loadAchievements())
+        const showUnlock = (event) => {
+          const titles = event.detail?.titles
+          if (titles?.length) showDanmaku(`🏆 解锁成就：${titles.join('、')}`)
+        }
+        window.addEventListener('dsh-funpack-achievements-change', syncAchievements)
+        window.addEventListener('dsh-funpack-unlock', showUnlock)
+        return () => {
+          window.removeEventListener('dsh-funpack-achievements-change', syncAchievements)
+          window.removeEventListener('dsh-funpack-unlock', showUnlock)
+        }
+      }, [])
+
+      useEffect(() => {
+        recordActivity('visit', 1)
+      }, [])
+
       const click = async (command) => {
         setError(null)
         try {
@@ -455,20 +825,34 @@ window.__ModuleLoader__.load({
             setError(result.error)
             return
           }
+          recordCommand(command)
           if (DANMAKU_COMMANDS.has(command) && result.text) showDanmaku(result.text)
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason))
         }
       }
 
+      const updateAtmosphere = (patch) => {
+        const next = applyAtmosphereConfig({ ...atmosphere, ...patch })
+        setAtmosphere(next)
+        return next
+      }
+
       const clickButton = async (button) => {
+        if ((button.command === '/break' || button.command.startsWith('/break-go')) && atmosphere.autoLink) {
+          updateAtmosphere({ scene: 'lofi' })
+        }
         if (button.command === '/break' && breakTarget.trim()) {
           const target = normalizeBreakTarget(breakTarget)
           if (isUrlBreakTarget(breakTarget)) {
+            recordCommand('/break')
             window.open(target, '_blank', 'noopener,noreferrer')
             return
           }
           return click(`/break-go ${breakTarget.trim()}`)
+        }
+        if (button.command.startsWith('/pomodoro') && atmosphere.autoLink) {
+          updateAtmosphere({ scene: 'cafe' })
         }
         return click(button.command)
       }
@@ -539,6 +923,28 @@ window.__ModuleLoader__.load({
           },
           onClick: () => setBeautyOpen((open) => !open),
         }, '🎨 美化'),
+        createElement('button', {
+          key: 'achievement',
+          type: 'button',
+          style: {
+            ...buttonStyle,
+            fontSize: `${Math.round(12 * scale)}px`,
+            lineHeight: `${Math.round(20 * scale)}px`,
+            padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+          },
+          onClick: () => setAchievementOpen((open) => !open),
+        }, '🏆 成就'),
+        createElement('button', {
+          key: 'market',
+          type: 'button',
+          style: {
+            ...buttonStyle,
+            fontSize: `${Math.round(12 * scale)}px`,
+            lineHeight: `${Math.round(20 * scale)}px`,
+            padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+          },
+          onClick: () => setMarketOpen((open) => !open),
+        }, '🧩 市场'),
         error === null ? null : createElement('span', { style: errorStyle, role: 'status' }, error),
       )
 
@@ -581,7 +987,18 @@ window.__ModuleLoader__.load({
           breakTarget,
           onBreakTargetChange: updateBreakTarget,
           onPreviewDanmaku: () => showDanmaku('✨ 今天也是元气满满的一天！'),
+          atmosphere,
+          onAtmosphereChange: updateAtmosphere,
           onClose: () => setBeautyOpen(false),
+        }), document.body) : null,
+        achievementOpen ? createPortal(createElement(AchievementPanel, {
+          state: achievements,
+          onClose: () => setAchievementOpen(false),
+        }), document.body) : null,
+        marketOpen ? createPortal(createElement(MarketPanel, {
+          update: updateBeauty,
+          run,
+          onClose: () => setMarketOpen(false),
         }), document.body) : null,
       )
     }
@@ -739,7 +1156,7 @@ window.__ModuleLoader__.load({
       placeItems: 'center',
     }
 
-    function BeautyPanel({ beauty, update, move, reset, breakTarget, onBreakTargetChange, onPreviewDanmaku, onClose }) {
+    function BeautyPanel({ beauty, update, move, reset, breakTarget, onBreakTargetChange, onPreviewDanmaku, onClose, atmosphere, onAtmosphereChange }) {
       const onBgFile = (event) => {
         const file = event.target.files?.[0]
         if (!file) return
@@ -772,9 +1189,11 @@ window.__ModuleLoader__.load({
         const beautyRaw = localStorage.getItem('dsh-funpack-beauty-config')
         const petRaw = localStorage.getItem('dsh-funpack-pet-config')
         const breakTargetRaw = localStorage.getItem('dsh-funpack-break-target') || ''
+        const atmosphereRaw = localStorage.getItem(ATMOSPHERE_KEY)
         if (beautyRaw) payload.beauty = JSON.parse(beautyRaw)
         if (petRaw) payload.pet = JSON.parse(petRaw)
         if (breakTargetRaw) payload.breakTarget = breakTargetRaw
+        if (atmosphereRaw) payload.atmosphere = JSON.parse(atmosphereRaw)
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -802,6 +1221,10 @@ window.__ModuleLoader__.load({
               if (parsed.breakTarget) {
                 localStorage.setItem('dsh-funpack-break-target', parsed.breakTarget)
                 onBreakTargetChange(parsed.breakTarget)
+              }
+              if (parsed.atmosphere) {
+                localStorage.setItem(ATMOSPHERE_KEY, JSON.stringify(parsed.atmosphere))
+                onAtmosphereChange(parsed.atmosphere)
               }
               window.location.reload()
             }
@@ -894,6 +1317,30 @@ window.__ModuleLoader__.load({
             onChange: (event) => update({ effect: event.target.value }),
           }, EFFECT_OPTIONS.map((option) => createElement('option', { key: option.id, value: option.id }, option.label))),
           createElement('span', { style: beautyValueStyle }, EFFECT_OPTIONS.find((option) => option.id === beauty.effect)?.label),
+        ),
+        createElement('div', { style: configLabelStyle }, '沉浸氛围'),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '环境音'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: atmosphere.scene,
+            onChange: (event) => onAtmosphereChange({ scene: event.target.value }),
+          }, ATMOSPHERE_SCENES.map((scene) => createElement('option', { key: scene.id, value: scene.id }, scene.label))),
+          createElement('span', { style: beautyValueStyle }, ATMOSPHERE_SCENES.find((scene) => scene.id === atmosphere.scene)?.label),
+        ),
+        rangeRow('音量', atmosphere.volume, 0, 100, (value) => onAtmosphereChange({ volume: value })),
+        createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          createElement('input', {
+            type: 'checkbox',
+            checked: atmosphere.autoLink,
+            onChange: (event) => onAtmosphereChange({ autoLink: event.target.checked }),
+          }),
+          createElement('span', { style: { color: 'var(--fp-text, #e6edf3)' } }, '番茄钟切雨声，摸鱼切 Lo-Fi'),
         ),
         createElement('div', { style: configLabelStyle }, '弹幕'),
         createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
@@ -996,6 +1443,372 @@ window.__ModuleLoader__.load({
           ),
         ),
         createElement('button', { type: 'button', style: { ...smallButtonStyle, width: '100%' }, onClick: reset }, '恢复默认'),
+      )
+    }
+
+    const achievementPanelStyle = {
+      position: 'fixed',
+      right: 16,
+      bottom: 16,
+      zIndex: 10000,
+      width: 340,
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'calc(100vh - 32px)',
+      overflowY: 'auto',
+      background: 'var(--fp-panel, #10161f)',
+      border: '1px solid var(--fp-border, #2a3546)',
+      borderRadius: 12,
+      boxShadow: '0 16px 40px rgba(0,0,0,.35)',
+      padding: 12,
+      color: 'var(--fp-text, #e6edf3)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      pointerEvents: 'auto',
+      fontSize: 13,
+      fontFamily: 'inherit',
+    }
+    const marketPanelStyle = {
+      ...achievementPanelStyle,
+      left: 16,
+      right: 'auto',
+    }
+    const progressTrackStyle = {
+      height: 8,
+      borderRadius: 999,
+      background: 'var(--fp-panel2, #182130)',
+      overflow: 'hidden',
+    }
+    const progressFillStyle = {
+      height: '100%',
+      borderRadius: 999,
+      background: 'var(--fp-accent, #3b82f6)',
+      transition: 'width .3s ease',
+    }
+    const statChipStyle = {
+      border: '1px solid var(--fp-border, #2a3546)',
+      borderRadius: 6,
+      background: 'var(--fp-panel2, #182130)',
+      padding: '5px 7px',
+      fontSize: 11,
+      lineHeight: 1.4,
+    }
+
+    function AchievementPanel({ state, onClose }) {
+      const unlockedCount = state.unlocked.length
+      const total = ACHIEVEMENTS.length
+      const progress = Math.round((unlockedCount / Math.max(1, total)) * 100)
+      const rank = seasonRank(state.season.points)
+      const stats = [
+        ['夸我', state.stats.praise],
+        ['运势', state.stats.fortune],
+        ['战报', state.stats.report],
+        ['番茄', `${state.stats.pomodoro} / ${state.stats.pomodoroMin}分`],
+        ['摸鱼', state.stats.break],
+        ['桌宠', `${state.stats.petPoints} 好感`],
+        ['任务', state.stats.task],
+        ['连续', `${state.streak} 天`],
+      ]
+      const shareCard = () => {
+        const escape = (value) => String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+        const season = state.season
+        const svg = [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">',
+          '<rect width="640" height="360" fill="#0d1b2a"/>',
+          '<circle cx="560" cy="60" r="90" fill="#164e63" opacity=".55"/>',
+          '<circle cx="80" cy="330" r="120" fill="#7c3aed" opacity=".22"/>',
+          `<text x="32" y="58" font-size="30" font-weight="700" fill="#ffe66d">摸鱼赛季卡</text>`,
+          `<text x="32" y="94" font-size="18" fill="#d7e3f4">${escape(season.id)} · ${escape(rank.title)}</text>`,
+          `<text x="32" y="148" font-size="58" font-weight="700" fill="#ffffff">${season.points}</text>`,
+          `<text x="110" y="148" font-size="18" fill="#8b98a9">赛季积分</text>`,
+          `<text x="32" y="206" font-size="16" fill="#8b98a9">夸我 ${season.praise} · 运势 ${season.fortune} · 番茄 ${season.pomodoro} · 摸鱼 ${season.break}</text>`,
+          `<text x="32" y="234" font-size="16" fill="#8b98a9">桌宠好感 ${season.petPoints} · 连续使用 ${state.streak} 天</text>`,
+          `<text x="32" y="292" font-size="16" fill="#f472b6">已解锁 ${unlockedCount} / ${total} 个成就</text>`,
+          `<text x="32" y="330" font-size="14" fill="#475569">dsh-funpack · DeepSeek Harness 摸鱼全家桶</text>`,
+          '</svg>',
+        ].join('')
+        const link = document.createElement('a')
+        link.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+        link.download = `dsh-funpack-${season.id}.svg`
+        link.click()
+      }
+
+      return createElement('div', { id: 'dsh-funpack-achievement-panel', style: achievementPanelStyle },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, '成就 / 赛季'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: onClose }, '✕'),
+        ),
+        createElement('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+          createElement('div', { style: { flex: 1, fontSize: 22, fontWeight: 700 } }, rank.title),
+          createElement('div', { style: statChipStyle }, `${state.season.points} 赛季积分`),
+        ),
+        createElement('div', { style: progressTrackStyle },
+          createElement('div', { style: { ...progressFillStyle, width: `${progress}%` } }),
+        ),
+        createElement('div', { style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' } },
+          `已解锁 ${unlockedCount} / ${total} 个成就（${progress}%）`,
+        ),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 } },
+          stats.map(([label, value]) => createElement('div', { key: label, style: statChipStyle },
+            createElement('div', { style: { color: 'var(--fp-dim, #8b98a9)' } }, label),
+            createElement('div', { style: { fontWeight: 600 } }, value),
+          )),
+        ),
+        createElement('div', { style: configLabelStyle }, '成就墙'),
+        createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+          ACHIEVEMENTS.map((achievement) => {
+            const unlocked = state.unlocked.includes(achievement.id)
+            return createElement('div', {
+              key: achievement.id,
+              style: {
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                border: '1px solid var(--fp-border, #2a3546)',
+                borderRadius: 6,
+                background: unlocked ? 'var(--fp-panel2, #182130)' : 'rgba(128,128,128,.06)',
+                padding: '6px 8px',
+                opacity: unlocked ? 1 : .55,
+              },
+            },
+              createElement('span', { style: { fontSize: 20 } }, achievement.icon),
+              createElement('div', { style: { flex: 1, minWidth: 0 } },
+                createElement('div', { style: { fontWeight: 600, fontSize: 12 } }, achievement.title),
+                createElement('div', { style: { fontSize: 11, color: 'var(--fp-dim, #8b98a9)' } }, achievement.desc),
+              ),
+              unlocked ? createElement('span', { style: { color: '#fbbf24', fontSize: 14 } }, '✓') : null,
+            )
+          }),
+        ),
+        createElement('div', { style: { display: 'flex', gap: 6 } },
+          createElement('button', { type: 'button', style: { ...smallButtonStyle, flex: 1 }, onClick: shareCard }, '生成赛季卡'),
+        ),
+      )
+    }
+
+    const MARKET_PRESETS = [
+      { id: 'pet-default', kind: 'pet', pet: 'default', title: '蓝鱼娘', desc: '内置 DeepSeek 娘 GIF 形象' },
+      { id: 'pet-taffy', kind: 'pet', pet: 'taffy', title: '塔菲', desc: 'Codex 社区塔菲宠物包' },
+      { id: 'theme-deep', kind: 'theme', theme: 'deep', title: '深空', desc: '默认深色主题' },
+      { id: 'theme-sakura', kind: 'theme', theme: 'sakura', title: '樱花', desc: '粉白樱色主题' },
+      { id: 'theme-mint', kind: 'theme', theme: 'mint', title: '薄荷', desc: '清爽薄荷主题' },
+      { id: 'theme-terminal', kind: 'theme', theme: 'terminal', title: '终端', desc: '绿色终端主题' },
+      { id: 'theme-paper', kind: 'theme', theme: 'paper', title: '纸白', desc: '明亮纸白主题' },
+      { id: 'persona-nee', kind: 'persona', command: '/persona nee', title: '大姐姐', desc: '温柔靠谱的大姐姐人设' },
+      { id: 'persona-imouto', kind: 'persona', command: '/persona imouto', title: '小妹妹', desc: '元气小妹妹人设' },
+      { id: 'persona-abstract', kind: 'persona', command: '/persona abstract', title: '抽象搞怪', desc: '抽象区脑洞人设' },
+    ]
+
+    function MarketPanel({ update, run, onClose }) {
+      const [scanning, setScanning] = useState(false)
+      const [repos, setRepos] = useState([])
+      const [message, setMessage] = useState(null)
+
+      const install = async (item) => {
+        setMessage(null)
+        try {
+          if (item.kind === 'theme') {
+            update({ theme: item.theme })
+          } else if (item.kind === 'persona') {
+            await run(item.command)
+          } else {
+            window.dispatchEvent(new CustomEvent('dsh-funpack-apply-pet-preset', { detail: { kind: item.pet } }))
+          }
+          setMessage(`已安装：${item.title}`)
+        } catch {
+          setMessage(`安装失败：${item.title}`)
+        }
+      }
+
+      const parseAssetPath = (assetPath) => {
+        const parts = assetPath.split(' / ')
+        if (parts.length < 3) return null
+        return {
+          repo: parts[0],
+          branch: parts[1],
+          path: parts.slice(2).join('/'),
+        }
+      }
+
+      const fetchWithTimeout = async (url, timeout = 6000, headers = {}) => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeout)
+        try {
+          return await fetch(url, { headers, signal: controller.signal })
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+
+      const resolveAssetUrl = (info, url) => {
+        if (/^https?:\/\//i.test(url)) return url
+        return `https://raw.githubusercontent.com/${info.repo}/${info.branch}/${url.replace(/^\.?\//, '')}`
+      }
+
+      const installCommunity = async (repo) => {
+        setMessage('安装社区资产中…')
+        try {
+          const info = parseAssetPath(repo.assetPath)
+          if (!info) throw new Error('资产路径无效')
+          const response = await fetchWithTimeout(`https://raw.githubusercontent.com/${info.repo}/${info.branch}/${info.path}`)
+          if (!response.ok) throw new Error(`manifest ${response.status}`)
+          const manifest = await response.json()
+          const packs = manifest.packs || manifest.assets || (manifest.pack ? [manifest.pack] : [])
+          if (packs.length === 0) throw new Error('manifest 里没有资产')
+          let installed = 0
+          for (const pack of packs) {
+            if (pack.type === 'theme' && pack.theme) {
+              update({ theme: pack.theme })
+              installed += 1
+            } else if (pack.type === 'persona' && pack.command) {
+              await run(pack.command)
+              installed += 1
+            } else if (pack.type === 'pet' && pack.petJsonUrl && pack.spritesheetUrl) {
+              const [petResponse, sheetResponse] = await Promise.all([
+                fetchWithTimeout(resolveAssetUrl(info, pack.petJsonUrl)),
+                fetchWithTimeout(resolveAssetUrl(info, pack.spritesheetUrl)),
+              ])
+              if (!petResponse.ok || !sheetResponse.ok) throw new Error('宠物资产下载失败')
+              const petJson = await petResponse.json()
+              const sheetBlob = await sheetResponse.blob()
+              const spritesheetDataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(String(reader.result))
+                reader.onerror = () => reject(new Error('spritesheet 读取失败'))
+                reader.readAsDataURL(sheetBlob)
+              })
+              window.dispatchEvent(new CustomEvent('dsh-funpack-install-pet-data', {
+                detail: { petJson, spritesheetDataUrl },
+              }))
+              installed += 1
+            }
+          }
+          setMessage(`已安装 ${installed} 个社区资产`)
+        } catch (reason) {
+          setMessage(reason instanceof Error ? reason.message : String(reason))
+        }
+      }
+
+      const probeManifest = async (repo) => {
+        const branches = [repo.default_branch || 'main', 'master']
+        const paths = ['dsh-assets.json', 'assets/dsh-assets.json']
+        for (const branch of branches) {
+          for (const path of paths) {
+            try {
+              const response = await fetchWithTimeout(`https://raw.githubusercontent.com/${repo.full_name}/${branch}/${path}`, 2500)
+              if (response.ok) return `${repo.full_name} / ${branch} / ${path}`
+            } catch {}
+          }
+        }
+        return null
+      }
+
+      const scanCommunity = async () => {
+        setScanning(true)
+        setRepos([])
+        setMessage(null)
+        try {
+          const response = await fetchWithTimeout(
+            'https://api.github.com/search/repositories?q=topic%3Adsh-plugin&sort=updated&per_page=20',
+            8000,
+            { accept: 'application/vnd.github+json' },
+          )
+          if (!response.ok) throw new Error(`GitHub ${response.status}`)
+          const json = await response.json()
+          const candidates = (json.items || []).slice(0, 8)
+          const withAssets = await Promise.all(candidates.map(async (repo) => {
+            const assetPath = await probeManifest(repo)
+            return {
+              full_name: repo.full_name,
+              description: repo.description || '',
+              html_url: repo.html_url,
+              stars: repo.stargazers_count || 0,
+              assetPath,
+            }
+          }))
+          setRepos(withAssets)
+          setMessage(withAssets.length > 0 ? `发现 ${withAssets.length} 个 dsh-plugin 社区仓库` : '暂时没发现可安装资产，可以先看看仓库列表')
+        } catch (reason) {
+          setMessage(reason instanceof Error ? reason.message : String(reason))
+        } finally {
+          setScanning(false)
+        }
+      }
+
+      return createElement('div', { id: 'dsh-funpack-market-panel', style: marketPanelStyle },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, 'Fun 资产市场'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: onClose }, '✕'),
+        ),
+        message ? createElement('div', { style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' } }, message) : null,
+        createElement('div', { style: configLabelStyle }, '内置资产包'),
+        createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+          MARKET_PRESETS.map((item) => createElement('div', {
+            key: item.id,
+            style: {
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              border: '1px solid var(--fp-border, #2a3546)',
+              borderRadius: 6,
+              background: 'var(--fp-panel2, #182130)',
+              padding: '6px 8px',
+            },
+          },
+            createElement('div', { style: { flex: 1, minWidth: 0 } },
+              createElement('div', { style: { fontWeight: 600, fontSize: 12 } }, item.title),
+              createElement('div', { style: { fontSize: 11, color: 'var(--fp-dim, #8b98a9)' } }, item.desc),
+            ),
+            createElement('button', { type: 'button', style: beautyMiniButtonStyle, onClick: () => install(item) }, '安装'),
+          )),
+        ),
+        createElement('div', { style: configLabelStyle }, 'dsh-plugin 社区'),
+        createElement('button', {
+          type: 'button',
+          style: { ...smallButtonStyle, width: '100%' },
+          onClick: scanCommunity,
+          disabled: scanning,
+        }, scanning ? '扫描中…' : '扫描 dsh-plugin 社区'),
+        createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+          repos.map((repo) => createElement('div', {
+            key: repo.full_name,
+            style: {
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              border: '1px solid var(--fp-border, #2a3546)',
+              borderRadius: 6,
+              background: 'var(--fp-panel2, #182130)',
+              padding: '6px 8px',
+            },
+          },
+            createElement('div', { style: { flex: 1, minWidth: 0 } },
+              createElement('div', { style: { fontWeight: 600, fontSize: 12 } }, repo.full_name),
+              createElement('div', {
+                style: {
+                  fontSize: 11,
+                  color: 'var(--fp-dim, #8b98a9)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+              }, repo.assetPath ? `资产：${repo.assetPath}` : (repo.description || `${repo.stars} stars`)),
+            ),
+            createElement('button', {
+              type: 'button',
+              style: beautyMiniButtonStyle,
+              onClick: () => window.open(repo.html_url, '_blank', 'noopener,noreferrer'),
+            }, '查看'),
+            repo.assetPath ? createElement('button', {
+              type: 'button',
+              style: beautyMiniButtonStyle,
+              onClick: () => installCommunity(repo),
+            }, '安装') : null,
+          )),
+        ),
       )
     }
 
@@ -1217,6 +2030,7 @@ window.__ModuleLoader__.load({
           points: current.points + gain,
           [type]: (current[type] || 0) + 1,
         }))
+        if (gain) recordActivity('petPoints', gain)
         return gain
       }
 
@@ -1229,6 +2043,7 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (prevRunningRef.current && !running) {
           addAffinity('task')
+          recordActivity('task', 1)
           showReaction(`${DONE_LINES[Math.floor(Math.random() * DONE_LINES.length)]}（好感 +${AFFINITY_RULES.task}）`)
         }
         prevRunningRef.current = running
@@ -1253,6 +2068,7 @@ window.__ModuleLoader__.load({
         if (typeof run !== 'function') return
         const result = await run(button.command)
         if (!result || result.ok === false) return
+        recordCommand(button.command)
         const type = AFFINITY_COMMANDS[button.command]
         if (!type) return
         const gain = addAffinity(type)
@@ -1327,6 +2143,32 @@ window.__ModuleLoader__.load({
           buttons: DEFAULT_BUTTONS,
         })
       }
+
+      useEffect(() => {
+        const applyPreset = (event) => {
+          const kind = event.detail?.kind
+          if (kind === 'taffy') applyTaffyPreset()
+          if (kind === 'default') resetConfig()
+        }
+        const installPetData = (event) => {
+          const petJson = event.detail?.petJson
+          const spritesheetDataUrl = event.detail?.spritesheetDataUrl
+          if (petJson && spritesheetDataUrl) {
+            setConfig((current) => ({
+              ...current,
+              image: null,
+              petJson,
+              spritesheetDataUrl,
+            }))
+          }
+        }
+        window.addEventListener('dsh-funpack-apply-pet-preset', applyPreset)
+        window.addEventListener('dsh-funpack-install-pet-data', installPetData)
+        return () => {
+          window.removeEventListener('dsh-funpack-apply-pet-preset', applyPreset)
+          window.removeEventListener('dsh-funpack-install-pet-data', installPetData)
+        }
+      }, [])
 
       const text = reaction || lines[line % lines.length]
       const petImage = config.image || (waving ? PET_WAVING : PET_IDLE)
