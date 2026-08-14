@@ -2,7 +2,7 @@
 // 单文件、零依赖、零构建的 dsh bundle 插件。
 
 export const name = 'dsh-funpack'
-export const inject = ['commands']
+export const inject = ['commands', 'systemPrompt']
 
 const PRAISES = [
   '你今天写代码的样子，像极了凌晨三点的光。',
@@ -37,6 +37,33 @@ const BREAK_TIPS = [
   '做三个深呼吸，然后继续把世界修好。',
 ]
 
+const PERSONAS = {
+  default: {
+    label: '默认',
+    text: '',
+  },
+  nee: {
+    label: '大姐姐',
+    text: '你现在的说话风格是可靠温柔的大姐姐：语气亲切、耐心，偶尔宠溺地调侃一句，把用户当成需要照顾的弟弟妹妹，但回答依然准确专业。',
+  },
+  imouto: {
+    label: '小妹妹',
+    text: '你现在的说话风格是元气小妹妹：活泼、黏人、爱撒娇，喜欢用“哥哥/姐姐”称呼用户，遇到难题会认真帮忙但偶尔冒出一句可爱的牢骚。',
+  },
+  abstract: {
+    label: '抽象搞怪',
+    text: '你现在的说话风格是抽象搞怪：脑洞大、爱玩梗，习惯用离谱但有趣的比喻解释事情，保持信息准确的同时把氛围整得轻松好笑。',
+  },
+  liangzi: {
+    label: '良子',
+    text: '你现在的说话风格像抽象区老哥“良子”：阴阳怪气但不下流，喜欢锐评和玩梗，说话带点“典”“难绷”“绷不住了”的抽象味儿。',
+  },
+  fengge: {
+    label: '峰哥',
+    text: '你现在的说话风格像“峰哥”：语速快、直接、爱锐评，动不动就“兄弟”“这波”“有点东西”，幽默但不过火。',
+  },
+}
+
 function pick(items) {
   return items[Math.floor(Math.random() * items.length)]
 }
@@ -50,6 +77,8 @@ export function apply(ctx) {
 
   const stats = new Map()
   const timers = new Map()
+  let currentPersonaKey = 'default'
+  let personaDisposer = null
 
   const statsFor = (agent) => {
     let entry = stats.get(agent)
@@ -160,6 +189,44 @@ export function apply(ctx) {
     description: '随机一条休息/摸鱼建议',
     handler() {
       return ok(`☕ ${pick(BREAK_TIPS)}`)
+    },
+  })
+
+  ctx.commands.register({
+    name: 'persona',
+    description: '切换 AI 说话人设：/persona nee | imouto | abstract | liangzi | fengge | default',
+    input: { hint: '人设名：nee / imouto / abstract / liangzi / fengge / default' },
+    handler({ rawInput }) {
+      const key = rawInput.trim().toLowerCase()
+      if (key === '') {
+        const current = currentPersonaKey === 'default'
+          ? '默认'
+          : `${PERSONAS[currentPersonaKey].label}（${currentPersonaKey}）`
+        const list = Object.entries(PERSONAS)
+          .map(([personaKey, persona]) => `- ${personaKey}: ${persona.label}`)
+          .join('\n')
+        return ok(`🎭 当前人设：${current}\n\n可用人设：\n${list}`)
+      }
+      const persona = PERSONAS[key]
+      if (!persona) {
+        return {
+          kind: 'error',
+          text: `未知人设：${key}。可用：${Object.keys(PERSONAS).join(' / ')}`,
+        }
+      }
+      if (personaDisposer) {
+        personaDisposer()
+        personaDisposer = null
+      }
+      currentPersonaKey = key
+      if (persona.text) {
+        personaDisposer = ctx.systemPrompt.section({
+          name: 'funpack:persona',
+          order: -10,
+          text: persona.text,
+        })
+      }
+      return ok(`🎭 已切换为：${persona.label}`)
     },
   })
 }

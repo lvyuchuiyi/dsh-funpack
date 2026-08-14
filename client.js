@@ -8,6 +8,7 @@ window.__ModuleLoader__.load({
       { label: '🎴 运势', command: '/fortune' },
       { label: '📊 战报', command: '/report' },
       { label: '🍅 番茄 25', command: '/pomodoro 25' },
+      { label: '🎭 人设', command: '/persona' },
       { label: '☕ 摸鱼', command: '/break' },
     ]
 

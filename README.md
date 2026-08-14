@@ -47,6 +47,20 @@ dsh plugin --profile web add ./dsh-funpack
 | `/pomodoro-status` | 查看剩余时间 |
 | `/pomodoro-stop` | 停止番茄钟 |
 | `/break` | 随机一条休息建议 |
+| `/persona` | 查看或切换 AI 说话人设 |
+
+## 人设
+
+`/persona` 可以切换 AI 的说话风格：
+
+| 人设 | 说明 |
+| --- | --- |
+| `nee` | 大姐姐 |
+| `imouto` | 小妹妹 |
+| `abstract` | 抽象搞怪 |
+| `liangzi` | 良子 |
+| `fengge` | 峰哥 |
+| `default` | 恢复默认 |
 
 ## 许可
 
