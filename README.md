@@ -5,6 +5,8 @@
 
 仓库：[https://github.com/lvyuchuiyi/dsh-funpack](https://github.com/lvyuchuiyi/dsh-funpack)
 
+![演示](assets/demo.gif)
+
 特点：
 
 - 单文件 `index.js`，零依赖、零构建
