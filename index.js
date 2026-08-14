@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 
 export const name = 'dsh-funpack'
 export const inject = ['commands', 'systemPrompt', 'webServer']
@@ -260,8 +260,13 @@ export function apply(ctx) {
       const target = rawInput.trim()
       if (!target) return ok('☕ 没有设置摸鱼目标，请先在美化面板里填一个。')
       try {
-        exec(`start "" "${target}"`)
-        return ok(`☕ 已帮你打开：${target}`)
+        const url = /^https?:\/\//i.test(target) || /^[^\s/]+\.\w{2,}/.test(target)
+          ? (/^https?:\/\//i.test(target) ? target : `https://${target}`)
+          : target
+        execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true }, (error) => {
+          if (error) console.error('[break-go error]', error.message)
+        })
+        return ok(`☕ 已帮你打开：${url}`)
       } catch (error) {
         return { kind: 'error', text: `打不开目标：${error instanceof Error ? error.message : String(error)}` }
       }
