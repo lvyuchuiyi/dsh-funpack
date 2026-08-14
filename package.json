@@ -1,0 +1,31 @@
+{
+  "name": "dsh-funpack",
+  "version": "0.1.0",
+  "description": "夸夸、运势、战报、番茄钟、摸鱼提醒一体化的轻量 DeepSeek Harness 插件",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "fun",
+    "pomodoro"
+  ],
+  "homepage": "https://github.com/lvyuchuiyi/dsh-funpack",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lvyuchuiyi/dsh-funpack.git"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
