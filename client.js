@@ -100,6 +100,9 @@ window.__ModuleLoader__.load({
       bgFit: 'fill',
       bgAlpha: 85,
       tint: 45,
+      bgBlur: 6,
+      glass: true,
+      bgScope: 'chat',
       buttonScale: 110,
       buttonAlign: 'center',
       effect: 'none',
@@ -128,6 +131,9 @@ window.__ModuleLoader__.load({
           bgFit: BEAUTY_FITS.includes(saved.bgFit) ? saved.bgFit : defaults.bgFit,
           bgAlpha: beautyClamp(saved.bgAlpha, 10, 100, defaults.bgAlpha),
           tint: beautyClamp(saved.tint, 0, 90, defaults.tint),
+          bgBlur: beautyClamp(saved.bgBlur, 0, 20, defaults.bgBlur),
+          glass: typeof saved.glass === 'boolean' ? saved.glass : defaults.glass,
+          bgScope: ['chat', 'full'].includes(saved.bgScope) ? saved.bgScope : defaults.bgScope,
           buttonScale: beautyClamp(saved.buttonScale, 80, 160, defaults.buttonScale),
           buttonAlign: ['left', 'center', 'right'].includes(saved.buttonAlign) ? saved.buttonAlign : defaults.buttonAlign,
           effect: EFFECT_IDS.includes(saved.effect) ? saved.effect : defaults.effect,
@@ -164,6 +170,12 @@ window.__ModuleLoader__.load({
       root.style.setProperty('--fp-bg-repeat', BEAUTY_FIT_REPEATS[beauty.bgFit] || 'no-repeat')
       root.style.setProperty('--fp-bg-alpha', String(beauty.bgAlpha / 100))
       root.style.setProperty('--fp-bg-tint', String(1 - beauty.tint / 200))
+      root.style.setProperty('--fp-bg-blur', `${beauty.bgBlur}px`)
+      root.style.setProperty('--fp-bg-overlay', String(beauty.tint / 100))
+
+      document.body.classList.toggle('dsh-funpack-glass', beauty.glass)
+      document.body.classList.toggle('dsh-funpack-bg-full', beauty.bgScope === 'full')
+      document.body.classList.toggle('dsh-funpack-bg-chat', beauty.bgScope === 'chat')
 
       let layer = document.getElementById('dsh-funpack-bg-layer')
       if (!layer) {
@@ -191,7 +203,12 @@ window.__ModuleLoader__.load({
           position: fixed; inset: 0; z-index: 0; pointer-events: none;
           background-image: var(--fp-bg-image); background-size: var(--fp-bg-size);
           background-repeat: var(--fp-bg-repeat); background-position: center;
-          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint));
+          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint)) blur(var(--fp-bg-blur));
+          transform: scale(1.06);
+        }
+        #dsh-funpack-bg-layer::after {
+          content: ""; position: absolute; inset: 0;
+          background: rgba(0, 0, 0, var(--fp-bg-overlay));
         }
         html, body, [class*="CgV-4G_frame"], [class*="cw98ZW_root"], [class*="cw98ZW_scrollBody"] {
           background-color: transparent !important;
@@ -201,11 +218,28 @@ window.__ModuleLoader__.load({
           content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
           background-image: var(--fp-bg-image); background-size: var(--fp-bg-size);
           background-repeat: var(--fp-bg-repeat); background-position: center;
-          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint));
+          opacity: var(--fp-bg-alpha); filter: brightness(var(--fp-bg-tint)) blur(var(--fp-bg-blur));
+          transform: scale(1.06);
+        }
+        [class*="cw98ZW_root"]::after {
+          content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+          background: rgba(0, 0, 0, var(--fp-bg-overlay));
         }
         [class*="HIpiuG_card"], [class*="HIpiuG_grow"], [class*="HIpiuG_scroll"], textarea.HIpiuG_input {
           background: transparent !important;
         }
+        body.dsh-funpack-bg-full #dsh-funpack-bg-layer { display: block; }
+        body.dsh-funpack-bg-chat #dsh-funpack-bg-layer { display: none; }
+        body.dsh-funpack-bg-full [class*="cw98ZW_root"]::before,
+        body.dsh-funpack-bg-full [class*="cw98ZW_root"]::after { display: none; }
+        body.dsh-funpack-bg-chat [class*="cw98ZW_root"]::before,
+        body.dsh-funpack-bg-chat [class*="cw98ZW_root"]::after { display: block; }
+        body.dsh-funpack-glass [class*="HIpiuG_card"] {
+          background: rgba(255, 255, 255, .14) !important;
+          backdrop-filter: blur(14px) saturate(1.4);
+          -webkit-backdrop-filter: blur(14px) saturate(1.4);
+        }
+        body.dsh-funpack-glass textarea.HIpiuG_input { color: var(--fp-text, #e6edf3) !important; }
         #dsh-funpack-fx {
           position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .55;
         }
@@ -820,6 +854,32 @@ window.__ModuleLoader__.load({
         ),
         rangeRow('透明度', beauty.bgAlpha, 10, 100, (value) => update({ bgAlpha: value })),
         rangeRow('暗色蒙层', beauty.tint, 0, 90, (value) => update({ tint: value })),
+        rangeRow('背景模糊', beauty.bgBlur, 0, 20, (value) => update({ bgBlur: value })),
+        createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          createElement('input', {
+            type: 'checkbox',
+            checked: beauty.glass,
+            onChange: (event) => update({ glass: event.target.checked }),
+          }),
+          createElement('span', { style: { color: 'var(--fp-text, #e6edf3)' } }, '输入区毛玻璃'),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '背景范围'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.bgScope,
+            onChange: (event) => update({ bgScope: event.target.value }),
+          },
+          createElement('option', { value: 'chat' }, '聊天区'),
+          createElement('option', { value: 'full' }, '全屏'),
+          ),
+          createElement('span', { style: beautyValueStyle }, beauty.bgScope === 'chat' ? '聊天区' : '全屏'),
+        ),
         rangeRow('按钮缩放', beauty.buttonScale, 80, 160, (value) => update({ buttonScale: value })),
         createElement('div', { style: beautyRowStyle },
           createElement('span', { style: beautyLabelStyle }, '动态特效'),
