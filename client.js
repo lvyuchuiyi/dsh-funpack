@@ -351,6 +351,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null)
       const [beautyOpen, setBeautyOpen] = useState(false)
       const [beauty, setBeauty] = useState(loadBeauty)
+      const [petVisible, setPetVisible] = useState(loadPetVisible)
 
       useEffect(() => {
         try {
@@ -358,6 +359,12 @@ window.__ModuleLoader__.load({
         } catch {}
         applyBeauty(beauty)
       }, [beauty])
+
+      useEffect(() => {
+        const syncPetVisible = () => setPetVisible(loadPetVisible())
+        window.addEventListener('dsh-funpack-pet-visible-change', syncPetVisible)
+        return () => window.removeEventListener('dsh-funpack-pet-visible-change', syncPetVisible)
+      }, [])
 
       const click = (command) => {
         setError(null)
@@ -383,6 +390,13 @@ window.__ModuleLoader__.load({
         modules: DEFAULT_BEAUTY.modules.map((module) => ({ ...module })),
       })
 
+      const togglePet = () => {
+        const next = !loadPetVisible()
+        localStorage.setItem(PET_VISIBLE_KEY, next ? '1' : '0')
+        setPetVisible(next)
+        window.dispatchEvent(new Event('dsh-funpack-pet-visible-change'))
+      }
+
       const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' }
       const scale = beauty.buttonScale / 100
       const enabledModules = beauty.modules.filter((module) => module.enabled)
@@ -400,6 +414,17 @@ window.__ModuleLoader__.load({
           },
           onClick: () => click(button.command),
         }, button.label)),
+        createElement('button', {
+          key: 'pet-visible',
+          type: 'button',
+          style: {
+            ...buttonStyle,
+            fontSize: `${Math.round(12 * scale)}px`,
+            lineHeight: `${Math.round(20 * scale)}px`,
+            padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+          },
+          onClick: togglePet,
+        }, petVisible ? '🐾 桌宠开' : '🐾 桌宠关'),
         createElement('button', {
           key: 'beauty',
           type: 'button',
@@ -816,6 +841,10 @@ window.__ModuleLoader__.load({
       }
     }
 
+    const PET_VISIBLE_KEY = 'dsh-funpack-pet-visible'
+
+    const loadPetVisible = () => localStorage.getItem(PET_VISIBLE_KEY) !== '0'
+
     function FunPet({ useSession, run }) {
       const [line, setLine] = useState(0)
       const [waving, setWaving] = useState(false)
@@ -827,6 +856,7 @@ window.__ModuleLoader__.load({
       const [presetError, setPresetError] = useState(null)
       const [affinity, setAffinity] = useState(loadAffinity)
       const [reaction, setReaction] = useState(null)
+      const [visible, setVisible] = useState(loadPetVisible)
       const running = useSession((snapshot) => snapshot.running)
       const dragRef = useRef(null)
       const movedRef = useRef(false)
@@ -964,6 +994,12 @@ window.__ModuleLoader__.load({
         prevRunningRef.current = running
       }, [running])
 
+      useEffect(() => {
+        const syncPetVisible = () => setVisible(loadPetVisible())
+        window.addEventListener('dsh-funpack-pet-visible-change', syncPetVisible)
+        return () => window.removeEventListener('dsh-funpack-pet-visible-change', syncPetVisible)
+      }, [])
+
       const handleClick = () => {
         if (movedRef.current) return
         setLine((current) => (current + 1) % lines.length)
@@ -1087,6 +1123,7 @@ window.__ModuleLoader__.load({
       const containerStyle = pos === null
         ? { ...petBaseStyle, right: 16, bottom: 16 }
         : { ...petBaseStyle, left: pos.x, top: pos.y }
+      if (!visible) return null
       return createPortal(
         createElement('div', { style: containerStyle },
           panelOpen ? createElement('div', { style: panelStyle },
