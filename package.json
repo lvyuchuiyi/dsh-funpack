@@ -1,6 +1,6 @@
 {
   "name": "dsh-funpack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "夸夸、运势、战报、番茄钟、摸鱼提醒一体化的轻量 DeepSeek Harness 插件",
   "type": "module",
   "main": "index.js",
@@ -17,7 +17,9 @@
     "LICENSE",
     "assets/demo.gif",
     "assets/pet-idle.gif",
-    "assets/pet-waving.gif"
+    "assets/pet-waving.gif",
+    "assets/taffy/pet.json",
+    "assets/taffy/spritesheet.webp"
   ],
   "keywords": [
     "dsh",

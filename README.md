@@ -69,11 +69,18 @@ dsh plugin --profile web add ./dsh-funpack
 
 - 形象：上传 GIF/PNG/WebP，或使用默认鲸鱼娘；支持动态和静态图片
 - 宠物包：上传 `pet.json` + `spritesheet.webp/png`，直接加载 HatchPet/Codex 宠物包生态的现成动态宠物
+- 内置预设：一键加载社区 Codex 宠物“塔菲 / Taffy”，无需手动上传
 - 空闲台词：每行一条，用户空闲时由桌宠随机轮播
 - 思考台词：每行一条，DeepSeek 思考时切换
 - 互动键：每行一个 `名称,命令`，点击直接执行
 
 位置和大小通过拖拽/`-`/`+` 调整，所有设置都会保存在浏览器本地。
+
+## 内置塔菲预设
+
+桌宠设置面板里点 `预设：塔菲 / Taffy`，就会加载社区 Codex 宠物
+[Taffy / 塔菲](https://codex-pet.org/pets/taffy/) 的完整图集动画。资源随插件打包，
+离线也能用；切换时会顺带换成塔菲风格的空闲/思考台词，之后仍可继续自定义。
 
 ## 许可
 
@@ -82,5 +89,8 @@ MIT
 ## 素材致谢
 
 桌宠 GIF 素材来自 [@linxin666/dsh-pet](https://www.npmjs.com/package/@linxin666/dsh-pet)（BSD-3-Clause，Copyright (c) 2026 zhu1090093659）。
+
+塔菲 / Taffy 宠物包由 [shengwen](https://codex-pet.org/creators/shengwen/) 创作，来自
+[codex-pet.org](https://codex-pet.org/pets/taffy/)，仅作个人/爱好者用途随插件分发。
 
 宠物包播放格式参照 HatchPet 的 [Codex V2 Pet Contract](https://github.com/srwang0506/HatchPet-CapybaraLulu/blob/main/hatch-pet/references/codex-pet-contract.md)（8 列 × 9/11 行图集）。

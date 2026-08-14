@@ -1,0 +1,9 @@
+{
+  "id": "taffy",
+  "displayName": "Taffy / 塔菲",
+  "description": "A soft, mischievous Codex desktop pet inspired by Taffy, with pink hair, mouse-ear headpiece, star hair accessories, a round chibi face, and a white-blue sailor dress.",
+  "spritesheetPath": "spritesheet.webp",
+  "kind": "person",
+  "source": "codex-pets.net",
+  "sourceId": "taffy"
+}

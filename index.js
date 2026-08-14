@@ -1,8 +1,11 @@
 // dsh-funpack: 夸夸 / 运势 / 战报 / 番茄钟 / 摸鱼提醒
 // 单文件、零依赖、零构建的 dsh bundle 插件。
 
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+
 export const name = 'dsh-funpack'
-export const inject = ['commands', 'systemPrompt']
+export const inject = ['commands', 'systemPrompt', 'webServer']
 
 const PRAISES = [
   '你今天写代码的样子，像极了凌晨三点的光。',
@@ -79,6 +82,41 @@ export function apply(ctx) {
   const timers = new Map()
   let currentPersonaKey = 'default'
   let personaDisposer = null
+
+  ctx.effect(() => {
+    const assetRoutes = [
+      { path: '/dsh-funpack/taffy/pet.json', file: 'pet.json', mime: 'application/json; charset=utf-8' },
+      { path: '/dsh-funpack/taffy/spritesheet.webp', file: 'spritesheet.webp', mime: 'image/webp' },
+    ]
+    const disposers = assetRoutes.map((route) => ctx.webServer.register({
+      kind: 'exact',
+      path: route.path,
+      handler: async (req, res) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405)
+          res.end()
+          return
+        }
+        try {
+          const body = await readFile(fileURLToPath(new URL(`./assets/taffy/${route.file}`, import.meta.url)))
+          res.writeHead(200, {
+            'content-type': route.mime,
+            'content-length': String(body.byteLength),
+            'cache-control': 'no-cache',
+          })
+          if (req.method === 'HEAD') {
+            res.end()
+            return
+          }
+          res.end(body)
+        } catch {
+          res.writeHead(404)
+          res.end()
+        }
+      },
+    }))
+    return () => { for (const dispose of disposers) dispose() }
+  }, 'dsh-funpack: pet assets')
 
   const statsFor = (agent) => {
     let entry = stats.get(agent)

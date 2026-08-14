@@ -166,6 +166,25 @@ window.__ModuleLoader__.load({
       waiting: { row: 6, durations: [225, 225, 225, 225, 225, 390] },
     }
 
+    const PRESET_TAFFY = {
+      manifestUrl: '/dsh-funpack/taffy/pet.json',
+      spritesheetUrl: '/dsh-funpack/taffy/spritesheet.webp',
+    }
+
+    const TAFFY_IDLE_LINES = [
+      '塔菲在偷看你写代码哦～',
+      '要一起摸鱼吗？我会帮你望风的！',
+      '今天也要元气满满地 debug 呀～',
+      '塔菲的尾巴已经准备好接住你的报错啦。',
+    ]
+
+    const TAFFY_THINKING_LINES = [
+      '塔菲正在认真思考……才怪，其实在想晚饭。',
+      '这个问题有点难，塔菲要加油！',
+      '嘘，DeepSeek 正在努力转脑子～',
+      '别急别急，答案马上就来啦！',
+    ]
+
     const DEFAULT_CONFIG = {
       image: null,
       petJson: null,
@@ -206,6 +225,7 @@ window.__ModuleLoader__.load({
       const [panelOpen, setPanelOpen] = useState(false)
       const [config, setConfig] = useState(loadConfig)
       const [petFrame, setPetFrame] = useState(0)
+      const [presetError, setPresetError] = useState(null)
       const running = useSession((snapshot) => snapshot.running)
       const dragRef = useRef(null)
       const movedRef = useRef(false)
@@ -342,6 +362,25 @@ window.__ModuleLoader__.load({
 
       const clearPetPackage = () => setConfig((current) => ({ ...current, petJson: null, spritesheetDataUrl: null }))
 
+      const applyTaffyPreset = async () => {
+        setPresetError(null)
+        try {
+          const response = await fetch(PRESET_TAFFY.manifestUrl)
+          if (!response.ok) throw new Error(String(response.status))
+          const petJson = await response.json()
+          setConfig((current) => ({
+            ...current,
+            image: null,
+            petJson,
+            spritesheetDataUrl: PRESET_TAFFY.spritesheetUrl,
+            idleLines: current.idleLines.length > 0 ? current.idleLines : TAFFY_IDLE_LINES,
+            thinkingLines: current.thinkingLines.length > 0 ? current.thinkingLines : TAFFY_THINKING_LINES,
+          }))
+        } catch {
+          setPresetError('塔菲包加载失败，请重启 dsh 后重试')
+        }
+      }
+
       const parseButtons = (text) => text.split('\n').map((raw) => {
         const idx = raw.indexOf(',')
         if (idx === -1) return null
@@ -411,8 +450,10 @@ window.__ModuleLoader__.load({
             createElement('div', { style: configLabelStyle }, '\u5ba0\u7269\u5305\uff08pet.json + spritesheet\uff09'),
             createElement('input', { type: 'file', accept: '.json,application/json', onChange: onPetJsonFile, style: { width: '100%' } }),
             createElement('input', { type: 'file', accept: 'image/*', onChange: onSpritesheetFile, style: { width: '100%' } }),
-            createElement('div', { style: { display: 'flex', gap: 4 } },
+            createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: applyTaffyPreset }, '预设：塔菲 / Taffy'),
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '\u6e05\u9664\u5ba0\u7269\u5305'),
+              presetError ? createElement('span', { style: errorStyle }, presetError) : null,
             ),
             createElement('div', { style: configLabelStyle }, '空闲台词（每行一条）'),
             createElement('textarea', {
