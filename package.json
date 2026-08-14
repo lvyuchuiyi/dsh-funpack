@@ -15,7 +15,9 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "assets/demo.gif"
+    "assets/demo.gif",
+    "assets/pet-idle.gif",
+    "assets/pet-waving.gif"
   ],
   "keywords": [
     "dsh",

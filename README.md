@@ -11,7 +11,7 @@
 
 - 单文件 `index.js`，零依赖、零构建
 - Web UI 输入框上方提供一键命令按钮，点击直接执行
-- 网页右下角有一只蓝鲸小桌宠，空闲时它会说“蓝色大肥鱼正在偷吃你的 token”，DeepSeek 思考时换成“鱼正在努力憋大招”
+- 网页右下角有一只 DeepSeek 娘风格的鲸鱼娘桌宠，空闲时它会说“蓝色大肥鱼正在偷吃你的 token”，DeepSeek 思考时换成“鱼正在努力憋大招”
 - 安装不需要任何构建授权
 - 所有统计按会话记录，`/report` 生成一张摸鱼战报
 
@@ -66,3 +66,7 @@ dsh plugin --profile web add ./dsh-funpack
 ## 许可
 
 MIT
+
+## 素材致谢
+
+桌宠 GIF 素材来自 [@linxin666/dsh-pet](https://www.npmjs.com/package/@linxin666/dsh-pet)（BSD-3-Clause，Copyright (c) 2026 zhu1090093659）。
