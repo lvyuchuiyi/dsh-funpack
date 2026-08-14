@@ -1,6 +1,6 @@
 # dsh-funpack
 
-一个把夸夸、运势、战报、番茄钟、摸鱼提醒、沉浸氛围、成就赛季和资产市场集成在一起的轻量
+一个把夸夸、运势、战报、番茄钟、摸鱼提醒、沉浸氛围、成就赛季、桌宠语音、Live2D、Boss 隐身和代码花园集成在一起的轻量
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件。
 
 仓库：[https://github.com/lvyuchuiyi/dsh-funpack](https://github.com/lvyuchuiyi/dsh-funpack)
@@ -15,6 +15,7 @@
 - Web Audio 实时合成环境音，不需要任何音频文件
 - 成就 / 赛季 / 赛季卡，把摸鱼玩成养成游戏
 - Fun 资产市场，支持内置资产包与 dsh-plugin 社区仓库扫描
+- 桌宠语音、Live2D 模型、Boss 隐身、番茄种树
 - 安装不需要任何构建授权
 - 所有统计按会话记录，`/report` 生成一张摸鱼战报
 
@@ -130,7 +131,7 @@ dsh plugin --profile web add ./dsh-funpack
 
 ## 成就 / 赛季
 
-快捷按钮行里的 `🏆 成就` 会打开成就墙：
+`🧩 Fun` 中心里的 `成就 / 赛季` 会打开成就墙：
 
 - 夸我、运势、战报、番茄钟、摸鱼、桌宠好感、完成任务、连续使用都会记入成就
 - 赛季按季度结算积分，从「摸鱼青铜」一路升到「摸鱼王者」
@@ -141,13 +142,49 @@ dsh plugin --profile web add ./dsh-funpack
 
 ## Fun 资产市场
 
-快捷按钮行里的 `🧩 市场` 会打开资产市场：
+`🧩 Fun` 中心里的 `资产市场` 会打开资产市场：
 
 - 内置宠物包：蓝鱼娘、塔菲
+- 内置 Live2D 包：Haru 官方测试模型
 - 内置主题：深空、樱花、薄荷、终端、纸白
 - 内置人设包：大姐姐、小妹妹、抽象搞怪
-- 扫描 dsh-plugin 社区：拉取最新仓库，自动探测 `dsh-assets.json` / `assets/dsh-assets.json`
-- 社区资产 manifest 支持 `type: pet / theme / persona` 三种资产，探测到后可直接安装
+- 数据源：Oh-My-DSH 聚合目录（399+ 插件）或 GitHub dsh-plugin 主题
+- 聚合目录可一键复制 `dsh plugin --profile web add github:...` 安装命令
+- GitHub 数据源自动探测 `dsh-assets.json` / `assets/dsh-assets.json`
+- 社区资产 manifest 支持 `type: pet / theme / persona / live2d`，探测到后可直接安装
+
+## 桌宠语音
+
+桌宠设置面板里可以开启语音：
+
+- 默认使用浏览器 `speechSynthesis`，支持选择本机声线、语速和音调
+- 也可以填本地 TTS API 地址，接口约定：`POST JSON { text, voice }`，返回音频流
+- 点击桌宠、摸头 / 喂食 / 抱抱、解锁成就、代码树长大时都会开口
+
+## Live2D 娘化
+
+桌宠设置面板支持填写 `.model3.json` 链接，或从资产市场一键安装 Haru：
+
+- 首次使用会从 CDN 加载 PIXI + Live2D 运行库
+- 支持 Cubism 2 和 Cubism 4 模型
+- 加载失败不会影响原 GIF 桌宠，会显示错误信息并保留原形象
+
+## Boss 来了
+
+快捷按钮行里的 `🕶 Boss` 会一键进入隐身模式：
+
+- 隐藏桌宠、弹幕和 Fun 按钮，切换到终端主题
+- 右下角出现一个假的「编译中 87%」面板，点击「恢复摸鱼」退出
+- 美化面板可以填 Boss-Key 程序路径，开启时自动启动
+
+## 代码花园
+
+`🧩 Fun` 中心里的 `代码花园` 会打开花园：
+
+- 完成番茄钟会种下一棵树，从 🌰 一路长到 🌳
+- 中途停止番茄钟不会种树
+- 花园会记录累计专注分钟数、今日种植次数和种植记录
+- 种下第 1 棵和第 10 棵树会解锁对应成就
 
 ## 许可
 

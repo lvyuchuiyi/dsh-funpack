@@ -555,6 +555,8 @@ window.__ModuleLoader__.load({
       { id: 'streak-3', title: '三天热度', desc: '连续使用 3 天', icon: '🔥', check: (state) => state.streak >= 3 },
       { id: 'streak-7', title: '一周全勤', desc: '连续使用 7 天', icon: '👑', check: (state) => state.streak >= 7 },
       { id: 'season-500', title: '赛季王者', desc: '赛季积分达到 500', icon: '🏆', check: (state) => state.season.points >= 500 },
+      { id: 'garden-1', title: '第一棵代码树', desc: '种下 1 棵代码树', icon: '🌱', check: (state) => state.stats.garden >= 1 },
+      { id: 'garden-10', title: '代码森林', desc: '种下 10 棵代码树', icon: '🌳', check: (state) => state.stats.garden >= 10 },
     ]
     const SEASON_RANKS = [
       { min: 0, title: '摸鱼青铜' },
@@ -575,6 +577,7 @@ window.__ModuleLoader__.load({
       hug: 2,
       task: 6,
       petPoints: 1,
+      garden: 5,
     }
     const currentSeason = () => {
       const now = new Date()
@@ -687,6 +690,160 @@ window.__ModuleLoader__.load({
       return key ? recordActivity(key, 1) : []
     }
 
+    const TTS_KEY = 'dsh-funpack-tts-config'
+    const DEFAULT_TTS = { enabled: false, voice: '', rate: 1, pitch: 1, endpoint: '' }
+    const loadTTS = () => {
+      try {
+        const raw = localStorage.getItem(TTS_KEY)
+        if (!raw) return { ...DEFAULT_TTS }
+        const saved = JSON.parse(raw)
+        return {
+          enabled: typeof saved.enabled === 'boolean' ? saved.enabled : DEFAULT_TTS.enabled,
+          voice: typeof saved.voice === 'string' ? saved.voice : '',
+          rate: beautyClamp(saved.rate, 0.5, 2, 1),
+          pitch: beautyClamp(saved.pitch, 0.5, 2, 1),
+          endpoint: typeof saved.endpoint === 'string' ? saved.endpoint : '',
+        }
+      } catch {
+        return { ...DEFAULT_TTS }
+      }
+    }
+    const saveTTS = (config) => {
+      try {
+        localStorage.setItem(TTS_KEY, JSON.stringify(config))
+      } catch {}
+    }
+
+    const speakText = (text) => {
+      const config = loadTTS()
+      if (!config.enabled || !text) return
+      const sayWithBrowser = () => {
+        if (!('speechSynthesis' in window)) return
+        window.speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.lang = 'zh-CN'
+        utterance.rate = config.rate
+        utterance.pitch = config.pitch
+        const voices = window.speechSynthesis.getVoices()
+        const voice = voices.find((item) => item.name === config.voice || item.voiceURI === config.voice)
+        if (voice) utterance.voice = voice
+        window.speechSynthesis.speak(utterance)
+      }
+      if (config.endpoint) {
+        fetch(config.endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text, voice: config.voice }),
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error(String(response.status))
+            return response.blob()
+          })
+          .then((blob) => {
+            const url = URL.createObjectURL(blob)
+            const audio = new Audio(url)
+            audio.onended = () => URL.revokeObjectURL(url)
+            audio.play().catch(sayWithBrowser)
+          })
+          .catch(sayWithBrowser)
+      } else {
+        sayWithBrowser()
+      }
+    }
+
+    const GARDEN_KEY = 'dsh-funpack-garden'
+    const PENDING_POMODORO_KEY = 'dsh-funpack-pending-pomodoro'
+    const GARDEN_EMOJI = ['🌰', '🌱', '🌿', '🪴', '🌳']
+    const LIVE2D_SCRIPTS = [
+      'https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js',
+      'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
+      'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
+      'https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism2.min.js',
+      'https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js',
+      'https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js',
+    ]
+    const loadScript = (src) => new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve()
+        return
+      }
+      const script = document.createElement('script')
+      script.src = src
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error(`脚本加载失败：${src}`))
+      document.head.appendChild(script)
+    })
+    const destroyLive2d = () => {
+      if (live2dRef?.current) {
+        try { live2dRef.current.app?.destroy?.(true) } catch {}
+        live2dRef.current = null
+      }
+    }
+    const loadGarden = () => {
+      const defaults = { trees: [], totalMinutes: 0, plantsToday: 0, log: [] }
+      try {
+        const raw = localStorage.getItem(GARDEN_KEY)
+        if (!raw) return defaults
+        const saved = JSON.parse(raw)
+        return {
+          trees: Array.isArray(saved.trees) ? saved.trees.filter((tree) => tree && typeof tree === 'object') : [],
+          totalMinutes: beautyClamp(saved.totalMinutes, 0, 999999, 0),
+          plantsToday: beautyClamp(saved.plantsToday, 0, 99999, 0),
+          log: Array.isArray(saved.log) ? saved.log.slice(0, 20) : [],
+        }
+      } catch {
+        return defaults
+      }
+    }
+    const saveGarden = (garden) => {
+      try {
+        localStorage.setItem(GARDEN_KEY, JSON.stringify(garden))
+      } catch {}
+    }
+    const growGarden = (minutes = 25) => {
+      const garden = loadGarden()
+      let tree = garden.trees.find((item) => item.stage < GARDEN_EMOJI.length - 1)
+      const isNewTree = !tree
+      if (!tree) {
+        tree = { id: `${Date.now()}-${Math.random()}`, plantedAt: Date.now(), stage: 0, minutes: 0 }
+        garden.trees.push(tree)
+      }
+      tree.stage += 1
+      tree.minutes += minutes
+      garden.totalMinutes += minutes
+      garden.plantsToday += 1
+      garden.log.unshift({
+        time: Date.now(),
+        text: isNewTree
+          ? `种下第 ${garden.trees.length} 棵代码树，专注 ${minutes} 分钟`
+          : `代码树长到 ${GARDEN_EMOJI[tree.stage]}，累计专注 ${tree.minutes} 分钟`,
+      })
+      garden.log = garden.log.slice(0, 20)
+      saveGarden(garden)
+      if (isNewTree) recordActivity('garden', 1)
+      window.dispatchEvent(new CustomEvent('dsh-funpack-garden-change', { detail: { garden, tree } }))
+      return garden
+    }
+    const scheduleGardenFromPending = () => {
+      try {
+        const raw = localStorage.getItem(PENDING_POMODORO_KEY)
+        if (!raw) return null
+        const pending = JSON.parse(raw)
+        const remaining = Number(pending.endAt) - Date.now()
+        if (remaining <= 0) {
+          localStorage.removeItem(PENDING_POMODORO_KEY)
+          growGarden(Number(pending.minutes) || 25)
+          return null
+        }
+        return setTimeout(() => {
+          localStorage.removeItem(PENDING_POMODORO_KEY)
+          growGarden(Number(pending.minutes) || 25)
+        }, remaining)
+      } catch {
+        return null
+      }
+    }
+
     const loadAffinity = () => {
       const defaults = { points: 0, pet: 0, feed: 0, hug: 0, task: 0 }
       try {
@@ -777,6 +934,13 @@ window.__ModuleLoader__.load({
       const [achievements, setAchievements] = useState(loadAchievements)
       const [achievementOpen, setAchievementOpen] = useState(false)
       const [marketOpen, setMarketOpen] = useState(false)
+      const [gardenOpen, setGardenOpen] = useState(false)
+      const [hubOpen, setHubOpen] = useState(false)
+      const [garden, setGarden] = useState(loadGarden)
+      const [bossOpen, setBossOpen] = useState(false)
+      const [bossKeyPath, setBossKeyPath] = useState(() => localStorage.getItem('dsh-funpack-boss-key-path') || '')
+      const previousThemeRef = useRef(null)
+      const pendingTimerRef = useRef(null)
 
       useEffect(() => {
         try {
@@ -816,6 +980,17 @@ window.__ModuleLoader__.load({
         recordActivity('visit', 1)
       }, [])
 
+      useEffect(() => {
+        pendingTimerRef.current = scheduleGardenFromPending()
+        return () => clearTimeout(pendingTimerRef.current)
+      }, [])
+
+      useEffect(() => {
+        const syncGarden = () => setGarden(loadGarden())
+        window.addEventListener('dsh-funpack-garden-change', syncGarden)
+        return () => window.removeEventListener('dsh-funpack-garden-change', syncGarden)
+      }, [])
+
       const click = async (command) => {
         setError(null)
         try {
@@ -826,6 +1001,23 @@ window.__ModuleLoader__.load({
             return
           }
           recordCommand(command)
+          const pomodoro = command.match(/^\/pomodoro\s+(\d+)/)
+          if (pomodoro) {
+            const minutes = Number(pomodoro[1]) || 25
+            const endAt = Date.now() + minutes * 60000
+            try {
+              localStorage.setItem(PENDING_POMODORO_KEY, JSON.stringify({ endAt, minutes }))
+            } catch {}
+            clearTimeout(pendingTimerRef.current)
+            pendingTimerRef.current = setTimeout(() => {
+              try { localStorage.removeItem(PENDING_POMODORO_KEY) } catch {}
+              growGarden(minutes)
+            }, minutes * 60000)
+          }
+          if (command === '/pomodoro-stop') {
+            clearTimeout(pendingTimerRef.current)
+            try { localStorage.removeItem(PENDING_POMODORO_KEY) } catch {}
+          }
           if (DANMAKU_COMMANDS.has(command) && result.text) showDanmaku(result.text)
         } catch (reason) {
           setError(reason instanceof Error ? reason.message : String(reason))
@@ -879,6 +1071,36 @@ window.__ModuleLoader__.load({
         window.dispatchEvent(new Event('dsh-funpack-pet-visible-change'))
       }
 
+      const toggleBoss = () => {
+        if (bossOpen) {
+          setBossOpen(false)
+          if (previousThemeRef.current) updateBeauty({ theme: previousThemeRef.current })
+          localStorage.setItem(PET_VISIBLE_KEY, '1')
+          window.dispatchEvent(new Event('dsh-funpack-pet-visible-change'))
+          return
+        }
+        previousThemeRef.current = beauty.theme
+        setBossOpen(true)
+        if (bossKeyPath.trim()) run(`/break-go ${bossKeyPath.trim()}`)
+        updateBeauty({ theme: 'terminal' })
+        updateAtmosphere({ scene: 'off' })
+        localStorage.setItem(PET_VISIBLE_KEY, '0')
+        window.dispatchEvent(new Event('dsh-funpack-pet-visible-change'))
+      }
+
+      const updateBossKeyPath = (value) => {
+        setBossKeyPath(value)
+        localStorage.setItem('dsh-funpack-boss-key-path', value)
+      }
+
+      const openFromHub = (key) => {
+        setHubOpen(false)
+        if (key === 'achievement') setAchievementOpen(true)
+        if (key === 'market') setMarketOpen(true)
+        if (key === 'garden') setGardenOpen(true)
+        if (key === 'boss') toggleBoss()
+      }
+
       const updateBreakTarget = (value) => {
         setBreakTarget(value)
         localStorage.setItem('dsh-funpack-break-target', value)
@@ -887,7 +1109,7 @@ window.__ModuleLoader__.load({
       const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' }
       const scale = beauty.buttonScale / 100
       const enabledModules = beauty.modules.filter((module) => module.enabled)
-      const row = createElement(
+      const row = bossOpen ? null : createElement(
         'div',
         { style: { ...rowStyle, justifyContent: alignMap[beauty.buttonAlign] } },
         enabledModules.map((button) => createElement('button', {
@@ -924,7 +1146,7 @@ window.__ModuleLoader__.load({
           onClick: () => setBeautyOpen((open) => !open),
         }, '🎨 美化'),
         createElement('button', {
-          key: 'achievement',
+          key: 'hub',
           type: 'button',
           style: {
             ...buttonStyle,
@@ -932,26 +1154,27 @@ window.__ModuleLoader__.load({
             lineHeight: `${Math.round(20 * scale)}px`,
             padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
           },
-          onClick: () => setAchievementOpen((open) => !open),
-        }, '🏆 成就'),
+          onClick: () => setHubOpen(true),
+        }, '🧩 Fun'),
         createElement('button', {
-          key: 'market',
+          key: 'boss',
           type: 'button',
           style: {
             ...buttonStyle,
             fontSize: `${Math.round(12 * scale)}px`,
             lineHeight: `${Math.round(20 * scale)}px`,
             padding: `${Math.round(1 * scale)}px ${Math.round(8 * scale)}px`,
+            borderColor: bossOpen ? 'var(--fp-accent, #22c55e)' : 'var(--fp-border, #2a3546)',
           },
-          onClick: () => setMarketOpen((open) => !open),
-        }, '🧩 市场'),
+          onClick: toggleBoss,
+        }, bossOpen ? '🕶 恢复' : '🕶 Boss'),
         error === null ? null : createElement('span', { style: errorStyle, role: 'status' }, error),
       )
 
       const danmakuStyleDef = DANMAKU_STYLES.find((style) => style.id === beauty.danmakuStyle) || DANMAKU_STYLES[0]
       const danmakuSpeed = DANMAKU_SPEEDS[beauty.danmakuSpeed] || 8
       const danmakuSize = DANMAKU_SIZES[beauty.danmakuSize] || 22
-      const danmakuLayer = danmaku.length === 0
+      const danmakuLayer = bossOpen || danmaku.length === 0
         ? null
         : createPortal(
           createElement('div', { style: danmakuLayerStyle },
@@ -976,10 +1199,59 @@ window.__ModuleLoader__.load({
           document.body,
         )
 
+      const bossLayer = bossOpen
+        ? createPortal(createElement('div', {
+            id: 'dsh-funpack-boss',
+            style: {
+              position: 'fixed',
+              right: 16,
+              bottom: 16,
+              zIndex: 10001,
+              width: 290,
+              maxWidth: 'calc(100vw - 32px)',
+              background: '#0a0f0a',
+              border: '1px solid #2c402c',
+              borderRadius: 10,
+              padding: 12,
+              color: '#d6f5d6',
+              fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+              boxShadow: '0 12px 32px rgba(0,0,0,.55)',
+              pointerEvents: 'auto',
+            },
+          },
+            createElement('div', { style: { fontSize: 12, color: '#7fa87f' } }, 'dsh-funpack · build output'),
+            createElement('div', { style: { fontSize: 13, marginTop: 6 } }, '编译中 87% · 正在验证代码花园...'),
+            createElement('div', { style: { height: 8, borderRadius: 999, background: '#182418', marginTop: 8, overflow: 'hidden' } },
+              createElement('div', { style: { width: '87%', height: '100%', background: '#22c55e', borderRadius: 999 } }),
+            ),
+            createElement('button', {
+              type: 'button',
+              style: {
+                ...smallButtonStyle,
+                width: '100%',
+                marginTop: 10,
+                background: '#182418',
+                color: '#d6f5d6',
+                borderColor: '#2c402c',
+              },
+              onClick: toggleBoss,
+            }, '恢复摸鱼'),
+          ),
+          document.body,
+        )
+        : null
+
       return createElement(Fragment, null,
         row,
         danmakuLayer,
-        beautyOpen ? createPortal(createElement(BeautyPanel, {
+        bossLayer,
+        bossOpen ? null : hubOpen ? createPortal(createElement(FunHubPanel, {
+          achievements,
+          garden,
+          onOpen: openFromHub,
+          onClose: () => setHubOpen(false),
+        }), document.body) : null,
+        bossOpen ? null : beautyOpen ? createPortal(createElement(BeautyPanel, {
           beauty,
           update: updateBeauty,
           move: moveModule,
@@ -989,16 +1261,21 @@ window.__ModuleLoader__.load({
           onPreviewDanmaku: () => showDanmaku('✨ 今天也是元气满满的一天！'),
           atmosphere,
           onAtmosphereChange: updateAtmosphere,
+          bossKeyPath,
+          onBossKeyPathChange: updateBossKeyPath,
           onClose: () => setBeautyOpen(false),
         }), document.body) : null,
-        achievementOpen ? createPortal(createElement(AchievementPanel, {
+        bossOpen ? null : achievementOpen ? createPortal(createElement(AchievementPanel, {
           state: achievements,
           onClose: () => setAchievementOpen(false),
         }), document.body) : null,
-        marketOpen ? createPortal(createElement(MarketPanel, {
+        bossOpen ? null : marketOpen ? createPortal(createElement(MarketPanel, {
           update: updateBeauty,
           run,
           onClose: () => setMarketOpen(false),
+        }), document.body) : null,
+        bossOpen ? null : gardenOpen ? createPortal(createElement(GardenPanel, {
+          onClose: () => setGardenOpen(false),
         }), document.body) : null,
       )
     }
@@ -1156,7 +1433,7 @@ window.__ModuleLoader__.load({
       placeItems: 'center',
     }
 
-    function BeautyPanel({ beauty, update, move, reset, breakTarget, onBreakTargetChange, onPreviewDanmaku, onClose, atmosphere, onAtmosphereChange }) {
+    function BeautyPanel({ beauty, update, move, reset, breakTarget, onBreakTargetChange, onPreviewDanmaku, onClose, atmosphere, onAtmosphereChange, bossKeyPath, onBossKeyPathChange }) {
       const onBgFile = (event) => {
         const file = event.target.files?.[0]
         if (!file) return
@@ -1190,10 +1467,12 @@ window.__ModuleLoader__.load({
         const petRaw = localStorage.getItem('dsh-funpack-pet-config')
         const breakTargetRaw = localStorage.getItem('dsh-funpack-break-target') || ''
         const atmosphereRaw = localStorage.getItem(ATMOSPHERE_KEY)
+        const bossKeyPathRaw = localStorage.getItem('dsh-funpack-boss-key-path') || ''
         if (beautyRaw) payload.beauty = JSON.parse(beautyRaw)
         if (petRaw) payload.pet = JSON.parse(petRaw)
         if (breakTargetRaw) payload.breakTarget = breakTargetRaw
         if (atmosphereRaw) payload.atmosphere = JSON.parse(atmosphereRaw)
+        if (bossKeyPathRaw) payload.bossKeyPath = bossKeyPathRaw
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
@@ -1225,6 +1504,10 @@ window.__ModuleLoader__.load({
               if (parsed.atmosphere) {
                 localStorage.setItem(ATMOSPHERE_KEY, JSON.stringify(parsed.atmosphere))
                 onAtmosphereChange(parsed.atmosphere)
+              }
+              if (parsed.bossKeyPath) {
+                localStorage.setItem('dsh-funpack-boss-key-path', parsed.bossKeyPath)
+                onBossKeyPathChange(parsed.bossKeyPath)
               }
               window.location.reload()
             }
@@ -1420,6 +1703,14 @@ window.__ModuleLoader__.load({
           value: breakTarget,
           onChange: (event) => onBreakTargetChange(event.target.value),
         }),
+        createElement('div', { style: configLabelStyle }, 'Boss 来了'),
+        createElement('input', {
+          type: 'text',
+          style: textareaStyle,
+          placeholder: 'Boss-Key 程序路径（可选），填写后一键启动',
+          value: bossKeyPath,
+          onChange: (event) => onBossKeyPathChange(event.target.value),
+        }),
         createElement('div', { style: configLabelStyle }, '快捷按钮模块'),
         createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
           beauty.modules.map((module) => createElement('div', { key: module.key, style: { display: 'flex', alignItems: 'center', gap: 6 } },
@@ -1507,6 +1798,7 @@ window.__ModuleLoader__.load({
         ['摸鱼', state.stats.break],
         ['桌宠', `${state.stats.petPoints} 好感`],
         ['任务', state.stats.task],
+        ['花园', `${state.stats.garden || 0} 棵`],
         ['连续', `${state.streak} 天`],
       ]
       const shareCard = () => {
@@ -1589,9 +1881,114 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function GardenPanel({ onClose }) {
+      const [garden, setGarden] = useState(loadGarden)
+      useEffect(() => {
+        const sync = () => setGarden(loadGarden())
+        window.addEventListener('dsh-funpack-garden-change', sync)
+        return () => window.removeEventListener('dsh-funpack-garden-change', sync)
+      }, [])
+      const forest = garden.trees.length
+      const mature = garden.trees.filter((tree) => tree.stage >= GARDEN_EMOJI.length - 1).length
+      const today = garden.log.filter((entry) => new Date(entry.time).toDateString() === new Date().toDateString()).length
+      return createElement('div', { id: 'dsh-funpack-garden-panel', style: achievementPanelStyle },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, '代码花园'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: onClose }, '✕'),
+        ),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5 } },
+          createElement('div', { style: statChipStyle },
+            createElement('div', { style: { color: 'var(--fp-dim, #8b98a9)' } }, '树苗'),
+            createElement('div', { style: { fontWeight: 600 } }, `${forest} 棵`),
+          ),
+          createElement('div', { style: statChipStyle },
+            createElement('div', { style: { color: 'var(--fp-dim, #8b98a9)' } }, '成材'),
+            createElement('div', { style: { fontWeight: 600 } }, `${mature} 棵`),
+          ),
+          createElement('div', { style: statChipStyle },
+            createElement('div', { style: { color: 'var(--fp-dim, #8b98a9)' } }, '专注'),
+            createElement('div', { style: { fontWeight: 600 } }, `${garden.totalMinutes} 分钟`),
+          ),
+        ),
+        createElement('div', { style: configLabelStyle }, `今日种植 ${today} 次`),
+        createElement('div', {
+          style: {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))',
+            gap: 6,
+            padding: 10,
+            border: '1px solid var(--fp-border, #2a3546)',
+            borderRadius: 8,
+            background: 'linear-gradient(180deg, rgba(16,40,32,.8), rgba(10,24,20,.9))',
+          },
+        },
+          (garden.trees.length === 0
+            ? createElement('div', { style: { gridColumn: '1 / -1', textAlign: 'center', color: 'var(--fp-dim, #8b98a9)', fontSize: 12 } }, '完成一个番茄钟，种下第一棵树')
+            : garden.trees.slice(-24).map((tree) => createElement('div', {
+              key: tree.id,
+              title: `${tree.minutes} 分钟 · ${new Date(tree.plantedAt).toLocaleDateString()}`,
+              style: { textAlign: 'center', fontSize: 30 },
+            }, GARDEN_EMOJI[tree.stage] || GARDEN_EMOJI[GARDEN_EMOJI.length - 1]))),
+        ),
+        createElement('div', { style: configLabelStyle }, '种植记录'),
+        createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+          garden.log.slice(0, 8).map((entry, index) => createElement('div', {
+            key: `${entry.time}-${index}`,
+            style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' },
+          }, `${new Date(entry.time).toLocaleTimeString()} · ${entry.text}`)),
+        ),
+      )
+    }
+
+    const funHubItemStyle = {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+      alignItems: 'flex-start',
+      border: '1px solid var(--fp-border, #2a3546)',
+      borderRadius: 8,
+      background: 'var(--fp-panel2, #182130)',
+      padding: '10px 12px',
+      cursor: 'pointer',
+      color: 'var(--fp-text, #e6edf3)',
+      textAlign: 'left',
+    }
+
+    function FunHubPanel({ achievements, garden, onOpen, onClose }) {
+      const unlocked = achievements.unlocked.length
+      const total = ACHIEVEMENTS.length
+      const trees = garden.trees.length
+      const minutes = garden.totalMinutes
+      const items = [
+        { key: 'achievement', icon: '🏆', title: '成就 / 赛季', desc: `已解锁 ${unlocked} / ${total} · 赛季积分 ${achievements.season.points}` },
+        { key: 'market', icon: '🧩', title: '资产市场', desc: '内置包 + 社区聚合目录' },
+        { key: 'garden', icon: '🌳', title: '代码花园', desc: `${trees} 棵 · 专注 ${minutes} 分钟` },
+        { key: 'boss', icon: '🕶', title: 'Boss 隐身', desc: '一键隐藏摸鱼现场' },
+      ]
+      return createElement('div', { id: 'dsh-funpack-fun-hub', style: achievementPanelStyle },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, 'Fun 中心'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: onClose }, '✕'),
+        ),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
+          items.map((item) => createElement('button', {
+            key: item.key,
+            type: 'button',
+            style: funHubItemStyle,
+            onClick: () => onOpen(item.key),
+          },
+            createElement('span', { style: { fontSize: 24 } }, item.icon),
+            createElement('span', { style: { fontWeight: 600, fontSize: 13 } }, item.title),
+            createElement('span', { style: { fontSize: 11, color: 'var(--fp-dim, #8b98a9)' } }, item.desc),
+          )),
+        ),
+      )
+    }
+
     const MARKET_PRESETS = [
       { id: 'pet-default', kind: 'pet', pet: 'default', title: '蓝鱼娘', desc: '内置 DeepSeek 娘 GIF 形象' },
       { id: 'pet-taffy', kind: 'pet', pet: 'taffy', title: '塔菲', desc: 'Codex 社区塔菲宠物包' },
+      { id: 'live2d-haru', kind: 'live2d', live2dUrl: 'https://raw.githubusercontent.com/Live2D/CubismWebSamples/develop/Samples/Resources/Haru/Haru.model3.json', title: 'Haru Live2D', desc: 'Live2D 官方测试模型，需要联网加载' },
       { id: 'theme-deep', kind: 'theme', theme: 'deep', title: '深空', desc: '默认深色主题' },
       { id: 'theme-sakura', kind: 'theme', theme: 'sakura', title: '樱花', desc: '粉白樱色主题' },
       { id: 'theme-mint', kind: 'theme', theme: 'mint', title: '薄荷', desc: '清爽薄荷主题' },
@@ -1606,6 +2003,7 @@ window.__ModuleLoader__.load({
       const [scanning, setScanning] = useState(false)
       const [repos, setRepos] = useState([])
       const [message, setMessage] = useState(null)
+      const [source, setSource] = useState('curated')
 
       const install = async (item) => {
         setMessage(null)
@@ -1614,12 +2012,24 @@ window.__ModuleLoader__.load({
             update({ theme: item.theme })
           } else if (item.kind === 'persona') {
             await run(item.command)
+          } else if (item.kind === 'live2d') {
+            window.dispatchEvent(new CustomEvent('dsh-funpack-install-live2d', { detail: { url: item.live2dUrl } }))
           } else {
             window.dispatchEvent(new CustomEvent('dsh-funpack-apply-pet-preset', { detail: { kind: item.pet } }))
           }
           setMessage(`已安装：${item.title}`)
         } catch {
           setMessage(`安装失败：${item.title}`)
+        }
+      }
+
+      const copyInstall = async (repo) => {
+        const command = repo.install || `dsh plugin --profile web add github:${repo.full_name}`
+        try {
+          await navigator.clipboard.writeText(command)
+          setMessage(`已复制：${command}`)
+        } catch {
+          setMessage(`安装命令：${command}`)
         }
       }
 
@@ -1666,6 +2076,9 @@ window.__ModuleLoader__.load({
             } else if (pack.type === 'persona' && pack.command) {
               await run(pack.command)
               installed += 1
+            } else if (pack.type === 'live2d' && pack.live2dUrl) {
+              window.dispatchEvent(new CustomEvent('dsh-funpack-install-live2d', { detail: { url: resolveAssetUrl(info, pack.live2dUrl) } }))
+              installed += 1
             } else if (pack.type === 'pet' && pack.petJsonUrl && pack.spritesheetUrl) {
               const [petResponse, sheetResponse] = await Promise.all([
                 fetchWithTimeout(resolveAssetUrl(info, pack.petJsonUrl)),
@@ -1711,26 +2124,43 @@ window.__ModuleLoader__.load({
         setRepos([])
         setMessage(null)
         try {
-          const response = await fetchWithTimeout(
-            'https://api.github.com/search/repositories?q=topic%3Adsh-plugin&sort=updated&per_page=20',
-            8000,
-            { accept: 'application/vnd.github+json' },
-          )
-          if (!response.ok) throw new Error(`GitHub ${response.status}`)
-          const json = await response.json()
-          const candidates = (json.items || []).slice(0, 8)
-          const withAssets = await Promise.all(candidates.map(async (repo) => {
-            const assetPath = await probeManifest(repo)
-            return {
-              full_name: repo.full_name,
-              description: repo.description || '',
-              html_url: repo.html_url,
-              stars: repo.stargazers_count || 0,
-              assetPath,
-            }
-          }))
-          setRepos(withAssets)
-          setMessage(withAssets.length > 0 ? `发现 ${withAssets.length} 个 dsh-plugin 社区仓库` : '暂时没发现可安装资产，可以先看看仓库列表')
+          if (source === 'curated') {
+            const response = await fetchWithTimeout('https://raw.githubusercontent.com/like-study1/Oh-My-DSH/main/data/plugins.json', 12000)
+            if (!response.ok) throw new Error(`Oh-My-DSH ${response.status}`)
+            const json = await response.json()
+            const candidates = (json.items || []).slice(0, 20)
+            setRepos(candidates.map((item) => ({
+              full_name: item.full_name,
+              description: item.note || item.description || item.category || '',
+              html_url: item.url,
+              stars: item.stars || 0,
+              assetPath: null,
+              install: `dsh plugin --profile web add github:${item.full_name}`,
+            })))
+            setMessage(`已载入 Oh-My-DSH 精选目录：${candidates.length} 个插件`)
+          } else {
+            const response = await fetchWithTimeout(
+              'https://api.github.com/search/repositories?q=topic%3Adsh-plugin&sort=updated&per_page=20',
+              8000,
+              { accept: 'application/vnd.github+json' },
+            )
+            if (!response.ok) throw new Error(`GitHub ${response.status}`)
+            const json = await response.json()
+            const candidates = (json.items || []).slice(0, 8)
+            const withAssets = await Promise.all(candidates.map(async (repo) => {
+              const assetPath = await probeManifest(repo)
+              return {
+                full_name: repo.full_name,
+                description: repo.description || '',
+                html_url: repo.html_url,
+                stars: repo.stargazers_count || 0,
+                assetPath,
+                install: `dsh plugin --profile web add github:${repo.full_name}`,
+              }
+            }))
+            setRepos(withAssets)
+            setMessage(withAssets.length > 0 ? `发现 ${withAssets.length} 个 dsh-plugin 社区仓库` : '暂时没发现可安装资产，可以先看看仓库列表')
+          }
         } catch (reason) {
           setMessage(reason instanceof Error ? reason.message : String(reason))
         } finally {
@@ -1766,12 +2196,29 @@ window.__ModuleLoader__.load({
           )),
         ),
         createElement('div', { style: configLabelStyle }, 'dsh-plugin 社区'),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '数据源'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: source,
+            onChange: (event) => setSource(event.target.value),
+          },
+          createElement('option', { value: 'curated' }, 'Oh-My-DSH 聚合目录'),
+          createElement('option', { value: 'github' }, 'GitHub dsh-plugin 主题'),
+          ),
+          createElement('span', { style: beautyValueStyle }, source === 'curated' ? '聚合目录' : 'GitHub'),
+        ),
         createElement('button', {
           type: 'button',
           style: { ...smallButtonStyle, width: '100%' },
           onClick: scanCommunity,
           disabled: scanning,
-        }, scanning ? '扫描中…' : '扫描 dsh-plugin 社区'),
+        }, scanning ? '扫描中…' : '扫描社区目录'),
         createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
           repos.map((repo) => createElement('div', {
             key: repo.full_name,
@@ -1797,6 +2244,11 @@ window.__ModuleLoader__.load({
                 },
               }, repo.assetPath ? `资产：${repo.assetPath}` : (repo.description || `${repo.stars} stars`)),
             ),
+            createElement('button', {
+              type: 'button',
+              style: beautyMiniButtonStyle,
+              onClick: () => copyInstall(repo),
+            }, '复制'),
             createElement('button', {
               type: 'button',
               style: beautyMiniButtonStyle,
@@ -1859,6 +2311,7 @@ window.__ModuleLoader__.load({
       image: null,
       petJson: null,
       spritesheetDataUrl: null,
+      live2dModelUrl: null,
       idleLines: [],
       thinkingLines: [],
       buttons: DEFAULT_BUTTONS,
@@ -1873,6 +2326,7 @@ window.__ModuleLoader__.load({
           image: typeof saved.image === 'string' ? saved.image : null,
           petJson: saved.petJson && typeof saved.petJson === 'object' ? saved.petJson : null,
           spritesheetDataUrl: typeof saved.spritesheetDataUrl === 'string' ? saved.spritesheetDataUrl : null,
+          live2dModelUrl: typeof saved.live2dModelUrl === 'string' ? saved.live2dModelUrl : null,
           idleLines: Array.isArray(saved.idleLines) ? saved.idleLines.filter((item) => typeof item === 'string') : [],
           thinkingLines: Array.isArray(saved.thinkingLines) ? saved.thinkingLines.filter((item) => typeof item === 'string') : [],
           buttons: sanitizeButtons(saved.buttons),
@@ -1910,6 +2364,8 @@ window.__ModuleLoader__.load({
       const [affinity, setAffinity] = useState(loadAffinity)
       const [reaction, setReaction] = useState(null)
       const [visible, setVisible] = useState(loadPetVisible)
+      const [tts, setTts] = useState(loadTTS)
+      const [ttsVoices, setTtsVoices] = useState([])
       const running = useSession((snapshot) => snapshot.running)
       const dragRef = useRef(null)
       const movedRef = useRef(false)
@@ -1917,6 +2373,9 @@ window.__ModuleLoader__.load({
       const sizeRef = useRef(size)
       const prevRunningRef = useRef(running)
       const reactionTimerRef = useRef(null)
+      const live2dRef = useRef(null)
+      const live2dContainerRef = useRef(null)
+      const [live2dError, setLive2dError] = useState(null)
       posRef.current = pos
       sizeRef.current = size
 
@@ -1949,6 +2408,17 @@ window.__ModuleLoader__.load({
           localStorage.setItem('dsh-funpack-pet-config', JSON.stringify(config))
         } catch {}
       }, [config])
+
+      useEffect(() => {
+        const updateVoices = () => setTtsVoices(window.speechSynthesis?.getVoices?.() || [])
+        updateVoices()
+        window.speechSynthesis?.addEventListener?.('voiceschanged', updateVoices)
+        return () => window.speechSynthesis?.removeEventListener?.('voiceschanged', updateVoices)
+      }, [])
+
+      useEffect(() => {
+        saveTTS(tts)
+      }, [tts])
 
       useLayoutEffect(() => {
         if (!config.petJson || !config.spritesheetDataUrl) return
@@ -2036,9 +2506,12 @@ window.__ModuleLoader__.load({
 
       const showReaction = (message, duration = 2400) => {
         setReaction(message)
+        speakText(message)
         clearTimeout(reactionTimerRef.current)
         reactionTimerRef.current = setTimeout(() => setReaction(null), duration)
       }
+
+      const updateTTS = (patch) => setTts((current) => ({ ...current, ...patch }))
 
       useEffect(() => {
         if (prevRunningRef.current && !running) {
@@ -2058,6 +2531,7 @@ window.__ModuleLoader__.load({
       const handleClick = () => {
         if (movedRef.current) return
         setLine((current) => (current + 1) % lines.length)
+        speakText(lines[line % lines.length])
         if (!waving && !config.image && !config.petJson) {
           setWaving(true)
           setTimeout(() => setWaving(false), 1400)
@@ -2079,7 +2553,7 @@ window.__ModuleLoader__.load({
         const file = event.target.files?.[0]
         if (!file) return
         const reader = new FileReader()
-        reader.onload = () => setConfig((current) => ({ ...current, image: String(reader.result) }))
+        reader.onload = () => setConfig((current) => ({ ...current, live2dModelUrl: null, image: String(reader.result) }))
         reader.readAsDataURL(file)
       }
 
@@ -2090,7 +2564,7 @@ window.__ModuleLoader__.load({
         reader.onload = () => {
           try {
             const parsed = JSON.parse(String(reader.result))
-            setConfig((current) => ({ ...current, petJson: parsed }))
+            setConfig((current) => ({ ...current, live2dModelUrl: null, petJson: parsed }))
           } catch {}
         }
         reader.readAsText(file)
@@ -2100,11 +2574,12 @@ window.__ModuleLoader__.load({
         const file = event.target.files?.[0]
         if (!file) return
         const reader = new FileReader()
-        reader.onload = () => setConfig((current) => ({ ...current, spritesheetDataUrl: String(reader.result) }))
+        reader.onload = () => setConfig((current) => ({ ...current, live2dModelUrl: null, spritesheetDataUrl: String(reader.result) }))
         reader.readAsDataURL(file)
       }
 
       const clearPetPackage = () => setConfig((current) => ({ ...current, petJson: null, spritesheetDataUrl: null }))
+      const clearLive2d = () => setConfig((current) => ({ ...current, live2dModelUrl: null }))
 
       const applyTaffyPreset = async () => {
         setPresetError(null)
@@ -2115,6 +2590,7 @@ window.__ModuleLoader__.load({
           setConfig((current) => ({
             ...current,
             image: null,
+            live2dModelUrl: null,
             petJson,
             spritesheetDataUrl: PRESET_TAFFY.spritesheetUrl,
             idleLines: current.idleLines.length > 0 ? current.idleLines : TAFFY_IDLE_LINES,
@@ -2122,6 +2598,38 @@ window.__ModuleLoader__.load({
           }))
         } catch {
           setPresetError('塔菲包加载失败，请重启 dsh 后重试')
+        }
+      }
+
+      const startLive2d = async () => {
+        if (!config.live2dModelUrl) return
+        setLive2dError(null)
+        try {
+          for (const src of LIVE2D_SCRIPTS) await loadScript(src)
+          const Live2DModelClass = window.PIXI?.live2d?.Live2DModel
+          if (!Live2DModelClass) throw new Error('Live2D 运行库加载失败')
+          const container = live2dContainerRef.current
+          if (!container) return
+          if (live2dRef.current) {
+            try { live2dRef.current.app?.destroy?.(true) } catch {}
+            live2dRef.current = null
+          }
+          const width = container.clientWidth || sizeRef.current || 240
+          const height = container.clientHeight || Math.round((sizeRef.current || 96) * 208 / 192)
+          const app = new PIXI.Application({ width, height, backgroundAlpha: 0, antialias: true, autoStart: true })
+          container.appendChild(app.view)
+          const model = await Promise.race([
+            Live2DModelClass.from(config.live2dModelUrl, { autoInteract: false, motionPreload: 'IDLE' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Live2D 模型加载超时')), 30000)),
+          ])
+          model.scale.set(Math.min(1, width / 420))
+          model.x = width / 2
+          model.y = height
+          model.anchor.set(0.5, 1)
+          app.stage.addChild(model)
+          live2dRef.current = { app, model }
+        } catch (error) {
+          setLive2dError(error instanceof Error ? error.message : String(error))
         }
       }
 
@@ -2138,11 +2646,29 @@ window.__ModuleLoader__.load({
           image: null,
           petJson: null,
           spritesheetDataUrl: null,
+          live2dModelUrl: null,
           idleLines: [],
           thinkingLines: [],
           buttons: DEFAULT_BUTTONS,
         })
       }
+
+      useEffect(() => {
+        if (!config.live2dModelUrl) {
+          if (live2dRef.current) {
+            try { live2dRef.current.app?.destroy?.(true) } catch {}
+            live2dRef.current = null
+          }
+          return undefined
+        }
+        startLive2d()
+        return () => {
+          if (live2dRef.current) {
+            try { live2dRef.current.app?.destroy?.(true) } catch {}
+            live2dRef.current = null
+          }
+        }
+      }, [config.live2dModelUrl])
 
       useEffect(() => {
         const applyPreset = (event) => {
@@ -2157,16 +2683,37 @@ window.__ModuleLoader__.load({
             setConfig((current) => ({
               ...current,
               image: null,
+              live2dModelUrl: null,
               petJson,
               spritesheetDataUrl,
             }))
           }
         }
+        const installLive2d = (event) => {
+          const url = event.detail?.url
+          if (url) {
+            setConfig((current) => ({
+              ...current,
+              image: null,
+              petJson: null,
+              spritesheetDataUrl: null,
+              live2dModelUrl: url,
+            }))
+          }
+        }
+        const onGardenChange = (event) => {
+          const tree = event.detail?.tree
+          if (tree) showReaction(`🌱 代码树长大了：${GARDEN_EMOJI[tree.stage] || GARDEN_EMOJI[GARDEN_EMOJI.length - 1]}`)
+        }
         window.addEventListener('dsh-funpack-apply-pet-preset', applyPreset)
         window.addEventListener('dsh-funpack-install-pet-data', installPetData)
+        window.addEventListener('dsh-funpack-install-live2d', installLive2d)
+        window.addEventListener('dsh-funpack-garden-change', onGardenChange)
         return () => {
           window.removeEventListener('dsh-funpack-apply-pet-preset', applyPreset)
           window.removeEventListener('dsh-funpack-install-pet-data', installPetData)
+          window.removeEventListener('dsh-funpack-install-live2d', installLive2d)
+          window.removeEventListener('dsh-funpack-garden-change', onGardenChange)
         }
       }, [])
 
@@ -2189,7 +2736,17 @@ window.__ModuleLoader__.load({
         pointerEvents: 'none',
         filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))',
       }
-      const petElement = config.petJson && config.spritesheetDataUrl
+      const petElement = config.live2dModelUrl
+        ? createElement('div', {
+            ref: live2dContainerRef,
+            style: {
+              width: petWidth,
+              height: petHeight,
+              pointerEvents: 'none',
+              display: 'block',
+            },
+          })
+        : config.petJson && config.spritesheetDataUrl
         ? createElement('div', { style: spritesheetStyle })
         : createElement('img', {
             src: petImage,
@@ -2223,6 +2780,18 @@ window.__ModuleLoader__.load({
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '\u6e05\u9664\u5ba0\u7269\u5305'),
               presetError ? createElement('span', { style: errorStyle }, presetError) : null,
             ),
+            createElement('div', { style: configLabelStyle }, 'Live2D 模型（.model3.json 链接）'),
+            createElement('input', {
+              type: 'text',
+              style: textareaStyle,
+              placeholder: 'https://.../model.model3.json',
+              value: config.live2dModelUrl || '',
+              onChange: (event) => setConfig((current) => ({ ...current, live2dModelUrl: event.target.value || null })),
+            }),
+            createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
+              createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearLive2d }, '清除 Live2D'),
+              live2dError ? createElement('span', { style: errorStyle }, live2dError) : null,
+            ),
             createElement('div', { style: configLabelStyle }, '空闲台词（每行一条）'),
             createElement('textarea', {
               style: textareaStyle,
@@ -2244,6 +2813,70 @@ window.__ModuleLoader__.load({
               value: config.buttons.map((button) => `${button.label},${button.command}`).join('\n'),
               onChange: (event) => setConfig((current) => ({ ...current, buttons: parseButtons(event.target.value) })),
             }),
+            createElement('div', { style: configLabelStyle }, '桌宠语音'),
+            createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              createElement('input', {
+                type: 'checkbox',
+                checked: tts.enabled,
+                onChange: (event) => updateTTS({ enabled: event.target.checked }),
+              }),
+              createElement('span', { style: { fontSize: 12, color: 'var(--fp-text, #e6edf3)' } }, '点击桌宠 / 互动时开口说话'),
+            ),
+            createElement('div', { style: beautyRowStyle },
+              createElement('span', { style: beautyLabelStyle }, '声线'),
+              createElement('select', {
+                style: {
+                  ...smallButtonStyle,
+                  width: '100%',
+                  background: 'var(--fp-panel2, #182130)',
+                  color: 'var(--fp-text, #e6edf3)',
+                },
+                value: tts.voice,
+                onChange: (event) => updateTTS({ voice: event.target.value }),
+              },
+              createElement('option', { value: '' }, '浏览器默认'),
+              ttsVoices.map((voice) => createElement('option', { key: voice.name, value: voice.name }, voice.name)),
+              ),
+              createElement('span', { style: beautyValueStyle }, tts.voice ? '自定义' : '默认'),
+            ),
+            createElement('div', { style: beautyRowStyle },
+              createElement('span', { style: beautyLabelStyle }, '语速'),
+              createElement('input', {
+                type: 'range',
+                min: 0.5,
+                max: 2,
+                step: 0.1,
+                value: tts.rate,
+                style: beautySliderStyle,
+                onChange: (event) => updateTTS({ rate: Number(event.target.value) }),
+              }),
+              createElement('span', { style: beautyValueStyle }, `${Math.round(tts.rate * 100)}%`),
+            ),
+            createElement('div', { style: beautyRowStyle },
+              createElement('span', { style: beautyLabelStyle }, '音调'),
+              createElement('input', {
+                type: 'range',
+                min: 0.5,
+                max: 2,
+                step: 0.1,
+                value: tts.pitch,
+                style: beautySliderStyle,
+                onChange: (event) => updateTTS({ pitch: Number(event.target.value) }),
+              }),
+              createElement('span', { style: beautyValueStyle }, `${Math.round(tts.pitch * 100)}%`),
+            ),
+            createElement('input', {
+              type: 'text',
+              style: textareaStyle,
+              placeholder: '本地 TTS API 地址（POST JSON {text} 返回音频）',
+              value: tts.endpoint,
+              onChange: (event) => updateTTS({ endpoint: event.target.value }),
+            }),
+            createElement('button', {
+              type: 'button',
+              style: smallButtonStyle,
+              onClick: () => speakText('今天也要元气满满地摸鱼哦！'),
+            }, '试听'),
             createElement('div', { style: configLabelStyle }, `好感 Lv.${level.level} ${level.title}（${affinity.points}）`),
             createElement('div', { style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' } },
               `摸头 ${affinity.pet} · 喂食 ${affinity.feed} · 抱抱 ${affinity.hug} · 任务 ${affinity.task}${nextLevel ? ` · 距 ${nextLevel.title} 还差 ${nextLevel.min - affinity.points}` : ''}`,
