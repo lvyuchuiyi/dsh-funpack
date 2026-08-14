@@ -1324,15 +1324,73 @@ window.__ModuleLoader__.load({
     const panelStyle = {
       background: 'var(--fp-panel, rgba(255,255,255,.98))',
       border: '1px solid var(--fp-border, rgba(74,144,217,.35))',
-      borderRadius: 10,
-      boxShadow: '0 4px 16px rgba(0,0,0,.14)',
+      borderRadius: 12,
+      boxShadow: '0 10px 30px rgba(0,0,0,.18)',
       padding: 10,
-      width: 240,
+      boxSizing: 'border-box',
+      width: 300,
+      maxWidth: 'calc(100vw - 24px)',
+      maxHeight: 'calc(100vh - 40px)',
+      overflowY: 'auto',
       pointerEvents: 'auto',
       display: 'flex',
       flexDirection: 'column',
-      gap: 6,
+      gap: 8,
       color: 'var(--fp-text, #16324f)',
+      fontSize: 12,
+      fontFamily: 'inherit',
+    }
+    const petTabBarStyle = {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: 4,
+      padding: 3,
+      borderRadius: 8,
+      background: 'var(--fp-panel2, rgba(74,144,217,.12))',
+    }
+    const petTabStyle = {
+      height: 26,
+      border: 0,
+      borderRadius: 6,
+      background: 'transparent',
+      color: 'var(--fp-dim, #5b7184)',
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: 'pointer',
+    }
+    const petTabActiveStyle = {
+      ...petTabStyle,
+      background: 'var(--fp-panel, #ffffff)',
+      color: 'var(--fp-text, #16324f)',
+      boxShadow: '0 1px 4px rgba(0,0,0,.12)',
+    }
+    const petHintStyle = {
+      fontSize: 11,
+      lineHeight: 1.4,
+      color: 'var(--fp-dim, #7c8b9c)',
+    }
+    const petChipStyle = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      height: 20,
+      padding: '0 7px',
+      borderRadius: 999,
+      border: '1px solid var(--fp-border, rgba(74,144,217,.35))',
+      background: 'var(--fp-panel2, rgba(74,144,217,.1))',
+      fontSize: 11,
+      color: 'var(--fp-text, #16324f)',
+    }
+    const petProgressTrackStyle = {
+      height: 8,
+      borderRadius: 999,
+      background: 'var(--fp-panel2, rgba(74,144,217,.18))',
+      overflow: 'hidden',
+    }
+    const petProgressFillStyle = {
+      height: '100%',
+      borderRadius: 999,
+      background: 'var(--fp-accent, #3b82f6)',
+      transition: 'width .2s ease',
     }
     const textareaStyle = {
       width: '100%',
@@ -2375,6 +2433,7 @@ window.__ModuleLoader__.load({
       const [pos, setPos] = useState(null)
       const [size, setSize] = useState(96)
       const [panelOpen, setPanelOpen] = useState(false)
+      const [petPanelTab, setPetPanelTab] = useState('look')
       const [config, setConfig] = useState(loadConfig)
       const [petFrame, setPetFrame] = useState(0)
       const [presetError, setPresetError] = useState(null)
@@ -2683,6 +2742,226 @@ window.__ModuleLoader__.load({
         })
       }
 
+      const resetLook = () => setConfig((current) => ({
+        ...current,
+        image: null,
+        petJson: null,
+        spritesheetDataUrl: null,
+        live2dModelUrl: null,
+      }))
+
+      const resetLines = () => setConfig((current) => ({
+        ...current,
+        idleLines: [],
+        thinkingLines: [],
+      }))
+
+      const changeSizeTo = (next) => {
+        const clamped = Math.max(48, Math.min(220, next))
+        setSize(clamped)
+        save(posRef.current, clamped)
+      }
+
+      const currentLookLabel = config.live2dModelUrl
+        ? 'Live2D'
+        : config.petJson && config.spritesheetDataUrl
+        ? '宠物包'
+        : config.image
+        ? '自定义图片'
+        : '蓝鱼娘'
+
+      const affinityProgress = nextLevel
+        ? Math.max(0, Math.min(1, affinity.points / nextLevel.min))
+        : 1
+
+      const tabButton = (key, label) => createElement('button', {
+        type: 'button',
+        key,
+        style: petPanelTab === key ? petTabActiveStyle : petTabStyle,
+        onClick: () => setPetPanelTab(key),
+      }, label)
+
+      const renderLookTab = () => createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          createElement('span', { style: configLabelStyle }, '当前形象'),
+          createElement('span', { style: levelBadgeStyle }, currentLookLabel),
+        ),
+        createElement('label', { style: { ...beautyFileButtonStyle, width: '100%', cursor: 'pointer' } },
+          '上传图片（GIF / PNG / WebP）',
+          createElement('input', { type: 'file', accept: 'image/*', onChange: onFile, style: { display: 'none' } }),
+        ),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 } },
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setConfig((current) => ({ ...current, image: null })) }, '清除图片'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: resetLook }, '重置形象'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: applyTaffyPreset }, '塔菲'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: applySenkoPreset }, '仙狐'),
+        ),
+        createElement('div', { style: configLabelStyle }, '宠物包'),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 } },
+          createElement('label', { style: { ...beautyFileButtonStyle, cursor: 'pointer' } },
+            '上传 pet.json',
+            createElement('input', { type: 'file', accept: '.json,application/json', onChange: onPetJsonFile, style: { display: 'none' } }),
+          ),
+          createElement('label', { style: { ...beautyFileButtonStyle, cursor: 'pointer' } },
+            '上传图集',
+            createElement('input', { type: 'file', accept: 'image/*', onChange: onSpritesheetFile, style: { display: 'none' } }),
+          ),
+        ),
+        presetError ? createElement('div', { style: errorStyle }, presetError) : null,
+        createElement('div', { style: configLabelStyle }, 'Live2D'),
+        createElement('input', {
+          type: 'text',
+          style: textareaStyle,
+          placeholder: 'https://.../model.model3.json',
+          value: config.live2dModelUrl || '',
+          onChange: (event) => setConfig((current) => ({ ...current, live2dModelUrl: event.target.value || null })),
+        }),
+        createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '清除宠物包'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearLive2d }, '清除 Live2D'),
+          live2dError ? createElement('span', { style: errorStyle }, live2dError) : null,
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '大小'),
+          createElement('input', {
+            type: 'range',
+            min: 48,
+            max: 220,
+            step: 4,
+            value: size,
+            style: beautySliderStyle,
+            onChange: (event) => changeSizeTo(Number(event.target.value)),
+          }),
+          createElement('span', { style: beautyValueStyle }, `${size}px`),
+        ),
+      )
+
+      const renderLinesTab = () => createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+          createElement('span', { style: configLabelStyle }, '空闲台词'),
+          createElement('button', { type: 'button', style: smallButtonStyle, onClick: resetLines }, '恢复默认'),
+        ),
+        createElement('textarea', {
+          style: textareaStyle,
+          rows: 3,
+          value: config.idleLines.join('\n'),
+          onChange: (event) => setConfig((current) => ({ ...current, idleLines: event.target.value.split('\n') })),
+        }),
+        createElement('span', { style: configLabelStyle }, '思考台词'),
+        createElement('textarea', {
+          style: textareaStyle,
+          rows: 3,
+          value: config.thinkingLines.join('\n'),
+          onChange: (event) => setConfig((current) => ({ ...current, thinkingLines: event.target.value.split('\n') })),
+        }),
+        createElement('span', { style: configLabelStyle }, '互动键（每行：名称,命令）'),
+        createElement('textarea', {
+          style: textareaStyle,
+          rows: 3,
+          value: config.buttons.map((button) => `${button.label},${button.command}`).join('\n'),
+          onChange: (event) => setConfig((current) => ({ ...current, buttons: parseButtons(event.target.value) })),
+        }),
+        createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
+          config.buttons.map((button) => createElement('span', {
+            key: `${button.label}-${button.command}`,
+            style: petChipStyle,
+          }, `${button.label} / ${button.command}`)),
+        ),
+      )
+
+      const renderVoiceTab = () => createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          createElement('input', {
+            type: 'checkbox',
+            checked: tts.enabled,
+            onChange: (event) => updateTTS({ enabled: event.target.checked }),
+          }),
+          createElement('span', { style: configLabelStyle }, '点击桌宠 / 互动时开口说话'),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '声线'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #ffffff)',
+              color: 'var(--fp-text, #16324f)',
+            },
+            value: tts.voice,
+            onChange: (event) => updateTTS({ voice: event.target.value }),
+          },
+          createElement('option', { value: '' }, '浏览器默认'),
+          ttsVoices.map((voice) => createElement('option', { key: voice.name, value: voice.name }, voice.name)),
+          ),
+          createElement('span', { style: beautyValueStyle }, tts.voice ? '自定义' : '默认'),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '语速'),
+          createElement('input', {
+            type: 'range',
+            min: 0.5,
+            max: 2,
+            step: 0.1,
+            value: tts.rate,
+            style: beautySliderStyle,
+            onChange: (event) => updateTTS({ rate: Number(event.target.value) }),
+          }),
+          createElement('span', { style: beautyValueStyle }, `${Math.round(tts.rate * 100)}%`),
+        ),
+        createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '音调'),
+          createElement('input', {
+            type: 'range',
+            min: 0.5,
+            max: 2,
+            step: 0.1,
+            value: tts.pitch,
+            style: beautySliderStyle,
+            onChange: (event) => updateTTS({ pitch: Number(event.target.value) }),
+          }),
+          createElement('span', { style: beautyValueStyle }, `${Math.round(tts.pitch * 100)}%`),
+        ),
+        createElement('input', {
+          type: 'text',
+          style: textareaStyle,
+          placeholder: '本地 TTS API 地址（POST JSON {text} 返回音频）',
+          value: tts.endpoint,
+          onChange: (event) => updateTTS({ endpoint: event.target.value }),
+        }),
+        createElement('button', {
+          type: 'button',
+          style: { ...smallButtonStyle, width: '100%' },
+          onClick: () => speakText('今天也要元气满满地摸鱼哦！'),
+        }, '试听'),
+      )
+
+      const renderAffinityTab = () => createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            createElement('span', { style: configLabelStyle }, `好感 Lv.${level.level}`),
+            createElement('span', { style: levelBadgeStyle }, level.title),
+          ),
+          createElement('span', { style: { ...beautyValueStyle, color: 'var(--fp-dim, #7c8b9c)' } }, `${affinity.points} 分`),
+        ),
+        createElement('div', { style: petProgressTrackStyle },
+          createElement('div', { style: { ...petProgressFillStyle, width: `${Math.round(affinityProgress * 100)}%` } }),
+        ),
+        createElement('div', { style: petHintStyle },
+          nextLevel ? `距 ${nextLevel.title} 还差 ${nextLevel.min - affinity.points} 分` : '已满级，继续陪桌宠玩吧',
+        ),
+        createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 } },
+          createElement('span', { style: petHintStyle }, `摸头 ${affinity.pet}`),
+          createElement('span', { style: petHintStyle }, `喂食 ${affinity.feed}`),
+          createElement('span', { style: petHintStyle }, `抱抱 ${affinity.hug}`),
+          createElement('span', { style: petHintStyle }, `任务 ${affinity.task}`),
+        ),
+        createElement('button', {
+          type: 'button',
+          style: { ...smallButtonStyle, width: '100%' },
+          onClick: () => setAffinity(saveAffinity({ points: 0, pet: 0, feed: 0, hug: 0, task: 0 })),
+        }, '重置好感'),
+      )
+
       useEffect(() => {
         if (!config.live2dModelUrl) {
           if (live2dRef.current) {
@@ -2797,125 +3076,27 @@ window.__ModuleLoader__.load({
       if (!visible) return null
       return createPortal(
         createElement('div', { style: containerStyle },
-          panelOpen ? createElement('div', { style: panelStyle },
-            createElement('div', { style: configLabelStyle }, '形象（GIF/PNG/WebP）'),
-            createElement('input', { type: 'file', accept: 'image/*', onChange: onFile, style: { width: '100%' } }),
-            createElement('div', { style: { display: 'flex', gap: 4 } },
-              createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setConfig((current) => ({ ...current, image: null })) }, '默认形象'),
+          panelOpen ? createElement('div', { id: 'dsh-funpack-pet-panel', style: panelStyle },
+            createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
+              createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, '桌宠设置'),
+              createElement('button', { type: 'button', style: { ...controlButtonStyle, fontSize: 13, lineHeight: '18px' }, title: '关闭', onClick: () => setPanelOpen(false) }, '✕'),
+            ),
+            createElement('div', { style: petTabBarStyle },
+              tabButton('look', '形象'),
+              tabButton('lines', '台词'),
+              tabButton('voice', '语音'),
+              tabButton('affinity', '好感'),
+            ),
+            createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+              petPanelTab === 'look' ? renderLookTab() : null,
+              petPanelTab === 'lines' ? renderLinesTab() : null,
+              petPanelTab === 'voice' ? renderVoiceTab() : null,
+              petPanelTab === 'affinity' ? renderAffinityTab() : null,
+            ),
+            createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 } },
               createElement('button', { type: 'button', style: smallButtonStyle, onClick: resetConfig }, '重置全部'),
+              createElement('button', { type: 'button', style: { ...smallButtonStyle, fontWeight: 600 }, onClick: () => setPanelOpen(false) }, '完成'),
             ),
-            createElement('div', { style: configLabelStyle }, '\u5ba0\u7269\u5305\uff08pet.json + spritesheet\uff09'),
-            createElement('input', { type: 'file', accept: '.json,application/json', onChange: onPetJsonFile, style: { width: '100%' } }),
-            createElement('input', { type: 'file', accept: 'image/*', onChange: onSpritesheetFile, style: { width: '100%' } }),
-            createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
-              createElement('button', { type: 'button', style: smallButtonStyle, onClick: applyTaffyPreset }, '预设：塔菲 / Taffy'),
-              createElement('button', { type: 'button', style: smallButtonStyle, onClick: applySenkoPreset }, '预设：仙狐 / Senko'),
-              createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearPetPackage }, '\u6e05\u9664\u5ba0\u7269\u5305'),
-              presetError ? createElement('span', { style: errorStyle }, presetError) : null,
-            ),
-            createElement('div', { style: configLabelStyle }, 'Live2D 模型（.model3.json 链接）'),
-            createElement('input', {
-              type: 'text',
-              style: textareaStyle,
-              placeholder: 'https://.../model.model3.json',
-              value: config.live2dModelUrl || '',
-              onChange: (event) => setConfig((current) => ({ ...current, live2dModelUrl: event.target.value || null })),
-            }),
-            createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' } },
-              createElement('button', { type: 'button', style: smallButtonStyle, onClick: clearLive2d }, '清除 Live2D'),
-              live2dError ? createElement('span', { style: errorStyle }, live2dError) : null,
-            ),
-            createElement('div', { style: configLabelStyle }, '空闲台词（每行一条）'),
-            createElement('textarea', {
-              style: textareaStyle,
-              rows: 4,
-              value: config.idleLines.join('\n'),
-              onChange: (event) => setConfig((current) => ({ ...current, idleLines: event.target.value.split('\n') })),
-            }),
-            createElement('div', { style: configLabelStyle }, '思考台词（每行一条）'),
-            createElement('textarea', {
-              style: textareaStyle,
-              rows: 4,
-              value: config.thinkingLines.join('\n'),
-              onChange: (event) => setConfig((current) => ({ ...current, thinkingLines: event.target.value.split('\n') })),
-            }),
-            createElement('div', { style: configLabelStyle }, '互动键（每行：名称,命令）'),
-            createElement('textarea', {
-              style: textareaStyle,
-              rows: 4,
-              value: config.buttons.map((button) => `${button.label},${button.command}`).join('\n'),
-              onChange: (event) => setConfig((current) => ({ ...current, buttons: parseButtons(event.target.value) })),
-            }),
-            createElement('div', { style: configLabelStyle }, '桌宠语音'),
-            createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-              createElement('input', {
-                type: 'checkbox',
-                checked: tts.enabled,
-                onChange: (event) => updateTTS({ enabled: event.target.checked }),
-              }),
-              createElement('span', { style: { fontSize: 12, color: 'var(--fp-text, #e6edf3)' } }, '点击桌宠 / 互动时开口说话'),
-            ),
-            createElement('div', { style: beautyRowStyle },
-              createElement('span', { style: beautyLabelStyle }, '声线'),
-              createElement('select', {
-                style: {
-                  ...smallButtonStyle,
-                  width: '100%',
-                  background: 'var(--fp-panel2, #182130)',
-                  color: 'var(--fp-text, #e6edf3)',
-                },
-                value: tts.voice,
-                onChange: (event) => updateTTS({ voice: event.target.value }),
-              },
-              createElement('option', { value: '' }, '浏览器默认'),
-              ttsVoices.map((voice) => createElement('option', { key: voice.name, value: voice.name }, voice.name)),
-              ),
-              createElement('span', { style: beautyValueStyle }, tts.voice ? '自定义' : '默认'),
-            ),
-            createElement('div', { style: beautyRowStyle },
-              createElement('span', { style: beautyLabelStyle }, '语速'),
-              createElement('input', {
-                type: 'range',
-                min: 0.5,
-                max: 2,
-                step: 0.1,
-                value: tts.rate,
-                style: beautySliderStyle,
-                onChange: (event) => updateTTS({ rate: Number(event.target.value) }),
-              }),
-              createElement('span', { style: beautyValueStyle }, `${Math.round(tts.rate * 100)}%`),
-            ),
-            createElement('div', { style: beautyRowStyle },
-              createElement('span', { style: beautyLabelStyle }, '音调'),
-              createElement('input', {
-                type: 'range',
-                min: 0.5,
-                max: 2,
-                step: 0.1,
-                value: tts.pitch,
-                style: beautySliderStyle,
-                onChange: (event) => updateTTS({ pitch: Number(event.target.value) }),
-              }),
-              createElement('span', { style: beautyValueStyle }, `${Math.round(tts.pitch * 100)}%`),
-            ),
-            createElement('input', {
-              type: 'text',
-              style: textareaStyle,
-              placeholder: '本地 TTS API 地址（POST JSON {text} 返回音频）',
-              value: tts.endpoint,
-              onChange: (event) => updateTTS({ endpoint: event.target.value }),
-            }),
-            createElement('button', {
-              type: 'button',
-              style: smallButtonStyle,
-              onClick: () => speakText('今天也要元气满满地摸鱼哦！'),
-            }, '试听'),
-            createElement('div', { style: configLabelStyle }, `好感 Lv.${level.level} ${level.title}（${affinity.points}）`),
-            createElement('div', { style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' } },
-              `摸头 ${affinity.pet} · 喂食 ${affinity.feed} · 抱抱 ${affinity.hug} · 任务 ${affinity.task}${nextLevel ? ` · 距 ${nextLevel.title} 还差 ${nextLevel.min - affinity.points}` : ''}`,
-            ),
-            createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setAffinity(saveAffinity({ points: 0, pet: 0, feed: 0, hug: 0, task: 0 })) }, '重置好感'),
-            createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setPanelOpen(false) }, '完成'),
           ) : null,
           createElement('div', { style: levelBadgeStyle }, `Lv.${level.level} ${level.title}`),
           createElement('div', { style: bubbleStyle, role: 'status' }, text),

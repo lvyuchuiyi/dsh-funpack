@@ -78,6 +78,7 @@ dsh plugin --profile web add ./dsh-funpack
 - 形象：上传 GIF/PNG/WebP，或使用默认鲸鱼娘；支持动态和静态图片
 - 宠物包：上传 `pet.json` + `spritesheet.webp/png`，直接加载 HatchPet/Codex 宠物包生态的现成动态宠物
 - 内置预设：一键加载社区 Codex 宠物“塔菲 / Taffy”，或热门狐娘 Live2D“仙狐 / Senko”
+- 设置面板按「形象 / 台词 / 语音 / 好感」分页，切换快捷、不再一长串挤在一起
 - 空闲台词：每行一条，用户空闲时由桌宠随机轮播
 - 思考台词：每行一条，DeepSeek 思考时切换
 - 互动键：每行一个 `名称,命令`，点击直接执行
