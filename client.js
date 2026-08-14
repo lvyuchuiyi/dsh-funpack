@@ -1,7 +1,7 @@
 window.__ModuleLoader__.load({
   id: 'dsh-funpack',
   factory(require) {
-    const { createElement, useEffect, useRef, useState } = require('react')
+    const { createElement, useEffect, useLayoutEffect, useRef, useState } = require('react')
     const { createPortal } = require('react-dom')
 
     const BUTTONS = [
@@ -268,8 +268,9 @@ window.__ModuleLoader__.load({
         } catch {}
       }, [config])
 
-      useEffect(() => {
+      useLayoutEffect(() => {
         if (!config.petJson || !config.spritesheetDataUrl) return
+        setPetFrame(0)
         const durations = running ? PET_STATES.waiting.durations : PET_STATES.idle.durations
         let index = 0
         const id = setInterval(() => {
