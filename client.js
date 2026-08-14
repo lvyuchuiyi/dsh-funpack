@@ -40,6 +40,8 @@ window.__ModuleLoader__.load({
         setError(null)
         run(command).then((failure) => {
           if (failure) setError(failure)
+        }, (reason) => {
+          setError(reason instanceof Error ? reason.message : String(reason))
         })
       }
       return createElement(
@@ -56,7 +58,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'remote'],
+      inject: ['slots', 'remote', 'remote.commands'],
       apply(ctx) {
         ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
           name: 'conversation.input.dock',
