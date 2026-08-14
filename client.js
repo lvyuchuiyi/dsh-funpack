@@ -102,6 +102,7 @@ window.__ModuleLoader__.load({
       tint: 45,
       buttonScale: 110,
       buttonAlign: 'center',
+      effect: 'none',
       modules: BUTTON_MODULES.map((module) => ({ ...module })),
     }
 
@@ -124,6 +125,7 @@ window.__ModuleLoader__.load({
           tint: beautyClamp(saved.tint, 0, 90, defaults.tint),
           buttonScale: beautyClamp(saved.buttonScale, 80, 160, defaults.buttonScale),
           buttonAlign: ['left', 'center', 'right'].includes(saved.buttonAlign) ? saved.buttonAlign : defaults.buttonAlign,
+          effect: EFFECT_IDS.includes(saved.effect) ? saved.effect : defaults.effect,
           modules: BUTTON_MODULES.map((def) => {
             const savedModule = Array.isArray(saved.modules)
               ? saved.modules.find((module) => module && module.key === def.key)
@@ -160,6 +162,14 @@ window.__ModuleLoader__.load({
         document.body.prepend(layer)
       }
 
+      let fx = document.getElementById('dsh-funpack-fx')
+      if (!fx) {
+        fx = document.createElement('div')
+        fx.id = 'dsh-funpack-fx'
+        document.body.appendChild(fx)
+      }
+      fx.className = `dsh-funpack-fx dsh-funpack-fx-${beauty.effect}`
+
       let style = document.getElementById(BEAUTY_STYLE_ID)
       if (!style) {
         style = document.createElement('style')
@@ -186,8 +196,112 @@ window.__ModuleLoader__.load({
         [class*="HIpiuG_card"], [class*="HIpiuG_grow"], [class*="HIpiuG_scroll"], textarea.HIpiuG_input {
           background: transparent !important;
         }
+        #dsh-funpack-fx {
+          position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .55;
+        }
+        .dsh-funpack-fx-none { display: none; }
+        .dsh-funpack-fx-stars {
+          background-image:
+            radial-gradient(1.5px 1.5px at 12% 22%, rgba(255,255,255,.95), transparent),
+            radial-gradient(2px 2px at 34% 64%, rgba(255,255,255,.8), transparent),
+            radial-gradient(1px 1px at 62% 18%, rgba(255,255,255,.9), transparent),
+            radial-gradient(2px 2px at 82% 44%, rgba(255,255,255,.75), transparent),
+            radial-gradient(1.5px 1.5px at 46% 82%, rgba(255,255,255,.85), transparent);
+          animation: dshFpTwinkle 3.6s ease-in-out infinite;
+        }
+        .dsh-funpack-fx-rain {
+          background-image: linear-gradient(transparent 0%, rgba(125,185,255,.5) 50%, transparent 100%);
+          background-size: 2px 90px;
+          animation: dshFpRain .55s linear infinite;
+        }
+        .dsh-funpack-fx-sakura {
+          background-image:
+            radial-gradient(6px 6px at 20% 30%, rgba(255,182,193,.95), transparent),
+            radial-gradient(5px 5px at 80% 20%, rgba(255,192,203,.85), transparent),
+            radial-gradient(7px 7px at 50% 70%, rgba(255,182,193,.7), transparent);
+          animation: dshFpSakura 9s linear infinite;
+        }
+        .dsh-funpack-fx-aurora {
+          background-image: linear-gradient(120deg, rgba(52,211,153,.28), rgba(96,165,250,.22), rgba(217,70,239,.22));
+          background-size: 300% 300%;
+          animation: dshFpAurora 9s ease infinite;
+        }
+        @keyframes dshFpTwinkle {
+          0%, 100% { opacity: .35; }
+          50% { opacity: .9; }
+        }
+        @keyframes dshFpRain {
+          from { background-position: 0 0; }
+          to { background-position: -24px 90px; }
+        }
+        @keyframes dshFpSakura {
+          from { background-position: 0 0, 0 0, 0 0; }
+          to { background-position: -90px 130px, -50px 100px, 70px 150px; }
+        }
+        @keyframes dshFpAurora {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
       `
     }
+
+    const AFFINITY_STORAGE_KEY = 'dsh-funpack-pet-affinity'
+    const AFFINITY_LEVELS = [
+      { level: 1, min: 0, title: '初遇' },
+      { level: 2, min: 50, title: '熟络' },
+      { level: 3, min: 150, title: '默契' },
+      { level: 4, min: 300, title: '挚友' },
+      { level: 5, min: 500, title: '灵魂绑定' },
+    ]
+    const AFFINITY_RULES = { pet: 5, feed: 8, hug: 6, task: 10 }
+    const AFFINITY_COMMANDS = { '/pet': 'pet', '/feed': 'feed', '/hug': 'hug' }
+    const DONE_LINES = [
+      '任务完成，桌宠给你比了个心。',
+      '搞定啦，不愧是你！',
+      '漂亮，奖励自己摸鱼五分钟吧。',
+    ]
+    const LEVEL_BONUS_LINES = {
+      2: ['已经和你很熟啦，可以一起吐槽老板了。'],
+      3: ['默契值拉满，你抬个手我就知道要摸鱼。'],
+      4: ['我们是挚友了，今晚一起看星星吧。'],
+      5: ['灵魂绑定完成，这辈子你都是我的主人。'],
+    }
+    const EFFECT_OPTIONS = [
+      { id: 'none', label: '无' },
+      { id: 'stars', label: '星空' },
+      { id: 'rain', label: '雨滴' },
+      { id: 'sakura', label: '樱花' },
+      { id: 'aurora', label: '极光' },
+    ]
+    const EFFECT_IDS = EFFECT_OPTIONS.map((option) => option.id)
+
+    const loadAffinity = () => {
+      const defaults = { points: 0, pet: 0, feed: 0, hug: 0, task: 0 }
+      try {
+        const raw = localStorage.getItem(AFFINITY_STORAGE_KEY)
+        if (!raw) return defaults
+        const saved = JSON.parse(raw)
+        return {
+          points: beautyClamp(saved.points, 0, 999999, 0),
+          pet: beautyClamp(saved.pet, 0, 999999, 0),
+          feed: beautyClamp(saved.feed, 0, 999999, 0),
+          hug: beautyClamp(saved.hug, 0, 999999, 0),
+          task: beautyClamp(saved.task, 0, 999999, 0),
+        }
+      } catch {
+        return defaults
+      }
+    }
+
+    const affinityLevel = (points) => {
+      let current = AFFINITY_LEVELS[0]
+      for (const level of AFFINITY_LEVELS) {
+        if (points >= level.min) current = level
+      }
+      return current
+    }
+
+    const nextAffinityLevel = (points) => AFFINITY_LEVELS.find((level) => level.min > points) || null
 
     const IDLE_LINES = [
       '蓝色大肥鱼正在偷吃你的 token……',
@@ -394,6 +508,17 @@ window.__ModuleLoader__.load({
       color: 'var(--fp-text, #16324f)',
     }
 
+    const levelBadgeStyle = {
+      background: 'var(--fp-accent, #3b82f6)',
+      color: '#ffffff',
+      borderRadius: 999,
+      padding: '2px 8px',
+      fontSize: 11,
+      lineHeight: '16px',
+      fontWeight: 600,
+      whiteSpace: 'nowrap',
+    }
+
     const beautyPanelStyle = {
       position: 'fixed',
       left: 16,
@@ -482,6 +607,43 @@ window.__ModuleLoader__.load({
         { value: 'right', label: '靠右' },
       ]
 
+      const exportConfig = () => {
+        const payload = {}
+        const beautyRaw = localStorage.getItem('dsh-funpack-beauty-config')
+        const petRaw = localStorage.getItem('dsh-funpack-pet-config')
+        if (beautyRaw) payload.beauty = JSON.parse(beautyRaw)
+        if (petRaw) payload.pet = JSON.parse(petRaw)
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'dsh-funpack-config.json'
+        link.click()
+        URL.revokeObjectURL(url)
+      }
+
+      const onImportFile = (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(String(reader.result))
+            if (parsed && typeof parsed === 'object') {
+              if (parsed.beauty) {
+                localStorage.setItem('dsh-funpack-beauty-config', JSON.stringify(parsed.beauty))
+                update({ ...parsed.beauty })
+              }
+              if (parsed.pet) {
+                localStorage.setItem('dsh-funpack-pet-config', JSON.stringify(parsed.pet))
+              }
+              window.location.reload()
+            }
+          } catch {}
+        }
+        reader.readAsText(file)
+      }
+
       return createElement('div', { id: 'dsh-funpack-beauty-panel', style: beautyPanelStyle },
         createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
           createElement('div', { style: { fontWeight: 600, fontSize: 14 } }, '美化面板'),
@@ -528,6 +690,20 @@ window.__ModuleLoader__.load({
         rangeRow('暗色蒙层', beauty.tint, 0, 90, (value) => update({ tint: value })),
         rangeRow('按钮缩放', beauty.buttonScale, 80, 160, (value) => update({ buttonScale: value })),
         createElement('div', { style: beautyRowStyle },
+          createElement('span', { style: beautyLabelStyle }, '动态特效'),
+          createElement('select', {
+            style: {
+              ...smallButtonStyle,
+              width: '100%',
+              background: 'var(--fp-panel2, #182130)',
+              color: 'var(--fp-text, #e6edf3)',
+            },
+            value: beauty.effect,
+            onChange: (event) => update({ effect: event.target.value }),
+          }, EFFECT_OPTIONS.map((option) => createElement('option', { key: option.id, value: option.id }, option.label))),
+          createElement('span', { style: beautyValueStyle }, EFFECT_OPTIONS.find((option) => option.id === beauty.effect)?.label),
+        ),
+        createElement('div', { style: beautyRowStyle },
           createElement('span', { style: beautyLabelStyle }, '按钮对齐'),
           createElement('div', { style: { display: 'flex', gap: 4 } },
             alignOptions.map((option) => createElement('button', {
@@ -558,6 +734,13 @@ window.__ModuleLoader__.load({
             createElement('button', { type: 'button', style: beautyMiniButtonStyle, onClick: () => move(module.key, -1) }, '↑'),
             createElement('button', { type: 'button', style: beautyMiniButtonStyle, onClick: () => move(module.key, 1) }, '↓'),
           )),
+        ),
+        createElement('div', { style: { display: 'flex', gap: 6 } },
+          createElement('button', { type: 'button', style: { ...smallButtonStyle, flex: 1 }, onClick: exportConfig }, '导出配置'),
+          createElement('label', { style: { ...smallButtonStyle, flex: 1, display: 'grid', placeItems: 'center' } },
+            '导入配置',
+            createElement('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' }, onChange: onImportFile }),
+          ),
         ),
         createElement('button', { type: 'button', style: { ...smallButtonStyle, width: '100%' }, onClick: reset }, '恢复默认'),
       )
@@ -642,20 +825,31 @@ window.__ModuleLoader__.load({
       const [config, setConfig] = useState(loadConfig)
       const [petFrame, setPetFrame] = useState(0)
       const [presetError, setPresetError] = useState(null)
+      const [affinity, setAffinity] = useState(loadAffinity)
+      const [reaction, setReaction] = useState(null)
       const running = useSession((snapshot) => snapshot.running)
       const dragRef = useRef(null)
       const movedRef = useRef(false)
       const posRef = useRef(pos)
       const sizeRef = useRef(size)
+      const prevRunningRef = useRef(running)
+      const reactionTimerRef = useRef(null)
       posRef.current = pos
       sizeRef.current = size
 
+      const idleLines = config.idleLines.length > 0 ? config.idleLines : IDLE_LINES
+      const thinkingLines = config.thinkingLines.length > 0 ? config.thinkingLines : THINKING_LINES
+      const level = affinityLevel(affinity.points)
+      const nextLevel = nextAffinityLevel(affinity.points)
+      const bonusLines = LEVEL_BONUS_LINES[level.level] || []
+      const lines = running ? thinkingLines : [...idleLines, ...bonusLines]
+
       useEffect(() => {
         const id = setInterval(() => {
-          setLine((current) => (current + 1) % (running ? THINKING_LINES.length : IDLE_LINES.length))
+          setLine((current) => (current + 1) % lines.length)
         }, 5000)
         return () => clearInterval(id)
-      }, [running])
+      }, [running, lines.length])
 
       useEffect(() => {
         try {
@@ -739,6 +933,37 @@ window.__ModuleLoader__.load({
         save(posRef.current, next)
       }
 
+      const saveAffinity = (next) => {
+        try {
+          localStorage.setItem(AFFINITY_STORAGE_KEY, JSON.stringify(next))
+        } catch {}
+        return next
+      }
+
+      const addAffinity = (type) => {
+        const gain = AFFINITY_RULES[type] || 0
+        setAffinity((current) => saveAffinity({
+          ...current,
+          points: current.points + gain,
+          [type]: (current[type] || 0) + 1,
+        }))
+        return gain
+      }
+
+      const showReaction = (message, duration = 2400) => {
+        setReaction(message)
+        clearTimeout(reactionTimerRef.current)
+        reactionTimerRef.current = setTimeout(() => setReaction(null), duration)
+      }
+
+      useEffect(() => {
+        if (prevRunningRef.current && !running) {
+          addAffinity('task')
+          showReaction(`${DONE_LINES[Math.floor(Math.random() * DONE_LINES.length)]}（好感 +${AFFINITY_RULES.task}）`)
+        }
+        prevRunningRef.current = running
+      }, [running])
+
       const handleClick = () => {
         if (movedRef.current) return
         setLine((current) => (current + 1) % lines.length)
@@ -746,6 +971,16 @@ window.__ModuleLoader__.load({
           setWaving(true)
           setTimeout(() => setWaving(false), 1400)
         }
+      }
+
+      const handlePetCommand = async (button) => {
+        if (typeof run !== 'function') return
+        const failure = await run(button.command)
+        if (failure) return
+        const type = AFFINITY_COMMANDS[button.command]
+        if (!type) return
+        const gain = addAffinity(type)
+        showReaction(`${button.label}成功，好感 +${gain}`)
       }
 
       const onFile = (event) => {
@@ -817,10 +1052,7 @@ window.__ModuleLoader__.load({
         })
       }
 
-      const idleLines = config.idleLines.length > 0 ? config.idleLines : IDLE_LINES
-      const thinkingLines = config.thinkingLines.length > 0 ? config.thinkingLines : THINKING_LINES
-      const lines = running ? thinkingLines : idleLines
-      const text = lines[line % lines.length]
+      const text = reaction || lines[line % lines.length]
       const petImage = config.image || (waving ? PET_WAVING : PET_IDLE)
       const petWidth = size
       const petHeight = Math.round((size * 208) / 192)
@@ -849,6 +1081,9 @@ window.__ModuleLoader__.load({
             draggable: false,
             style: { display: 'block', pointerEvents: 'none', filter: 'drop-shadow(0 3px 6px rgba(0,0,0,.18))' },
           })
+      const unlockButtons = level.level >= 2 && !config.buttons.some((button) => button.command === '/hug')
+        ? [{ label: '抱抱', command: '/hug' }]
+        : []
       const containerStyle = pos === null
         ? { ...petBaseStyle, right: 16, bottom: 16 }
         : { ...petBaseStyle, left: pos.x, top: pos.y }
@@ -890,20 +1125,24 @@ window.__ModuleLoader__.load({
               value: config.buttons.map((button) => `${button.label},${button.command}`).join('\n'),
               onChange: (event) => setConfig((current) => ({ ...current, buttons: parseButtons(event.target.value) })),
             }),
+            createElement('div', { style: configLabelStyle }, `好感 Lv.${level.level} ${level.title}（${affinity.points}）`),
+            createElement('div', { style: { fontSize: 12, color: 'var(--fp-dim, #8b98a9)' } },
+              `摸头 ${affinity.pet} · 喂食 ${affinity.feed} · 抱抱 ${affinity.hug} · 任务 ${affinity.task}${nextLevel ? ` · 距 ${nextLevel.title} 还差 ${nextLevel.min - affinity.points}` : ''}`,
+            ),
+            createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setAffinity(saveAffinity({ points: 0, pet: 0, feed: 0, hug: 0, task: 0 })) }, '重置好感'),
             createElement('button', { type: 'button', style: smallButtonStyle, onClick: () => setPanelOpen(false) }, '完成'),
           ) : null,
+          createElement('div', { style: levelBadgeStyle }, `Lv.${level.level} ${level.title}`),
           createElement('div', { style: bubbleStyle, role: 'status' }, text),
           createElement('div', { style: controlRowStyle },
             createElement('button', { type: 'button', style: controlButtonStyle, title: '设置', onClick: () => setPanelOpen((open) => !open) }, '⚙'),
             createElement('button', { type: 'button', style: controlButtonStyle, title: '缩小', onClick: () => changeSize(-16) }, '-'),
             createElement('button', { type: 'button', style: controlButtonStyle, title: '放大', onClick: () => changeSize(16) }, '+'),
-            ...config.buttons.map((button) => createElement('button', {
+            ...[...config.buttons, ...unlockButtons].map((button) => createElement('button', {
               type: 'button',
               key: `${button.label}-${button.command}`,
               style: controlButtonStyle,
-              onClick: () => {
-                if (typeof run === 'function') run(button.command)
-              },
+              onClick: () => handlePetCommand(button),
             }, button.label)),
           ),
           createElement('div', {

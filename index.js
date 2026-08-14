@@ -54,6 +54,13 @@ const FEED_RESPONSES = [
   '它叼走零食，满意地打了个小嗝。',
 ]
 
+const HUG_RESPONSES = [
+  '桌宠钻进你怀里，蹭了蹭就不肯出来。',
+  '你抱了抱桌宠，它小声说“再抱紧一点”。',
+  '拥抱成功，桌宠感觉自己被全世界爱着。',
+  '它回抱住你，还偷偷拍了拍你的背。',
+]
+
 const PERSONAS = {
   default: {
     label: '默认',
@@ -257,6 +264,14 @@ export function apply(ctx) {
     description: '给桌宠喂食',
     handler() {
       return ok(`🍪 ${pick(FEED_RESPONSES)}`)
+    },
+  })
+
+  ctx.commands.register({
+    name: 'hug',
+    description: '抱抱桌宠',
+    handler() {
+      return ok(`🤗 ${pick(HUG_RESPONSES)}`)
     },
   })
 
