@@ -456,6 +456,11 @@ window.__ModuleLoader__.load({
         window.dispatchEvent(new Event('dsh-funpack-pet-visible-change'))
       }
 
+      const updateBreakTarget = (value) => {
+        setBreakTarget(value)
+        localStorage.setItem('dsh-funpack-break-target', value)
+      }
+
       const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' }
       const scale = beauty.buttonScale / 100
       const enabledModules = beauty.modules.filter((module) => module.enabled)
@@ -535,10 +540,7 @@ window.__ModuleLoader__.load({
           move: moveModule,
           reset: resetBeauty,
           breakTarget,
-          onBreakTargetChange: (value) => {
-            setBreakTarget(value)
-            localStorage.setItem('dsh-funpack-break-target', value)
-          },
+          onBreakTargetChange: updateBreakTarget,
           onPreviewDanmaku: () => showDanmaku('✨ 今天也是元气满满的一天！'),
           onClose: () => setBeautyOpen(false),
         }), document.body) : null,
@@ -1374,7 +1376,7 @@ window.__ModuleLoader__.load({
               if (!result.ok) return { ok: false, error: `${result.error.message} (${result.error.code})` }
               const value = result.value
               if (value === undefined) return { ok: false, error: `unknown command: ${line}` }
-              return { ok: true, text: typeof value === 'string' ? value : (value?.text || '') }
+              return { ok: true, text: typeof value === 'string' ? value : (value?.result?.text || value?.text || '') }
             },
           }),
         }, FunPet))
@@ -1388,7 +1390,7 @@ window.__ModuleLoader__.load({
               if (!result.ok) return { ok: false, error: `${result.error.message} (${result.error.code})` }
               const value = result.value
               if (value === undefined) return { ok: false, error: `unknown command: ${line}` }
-              return { ok: true, text: typeof value === 'string' ? value : (value?.text || '') }
+              return { ok: true, text: typeof value === 'string' ? value : (value?.result?.text || value?.text || '') }
             },
           }),
         }, FunButtons))
